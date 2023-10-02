@@ -1,0 +1,51 @@
+#ifndef __GSM_SIM900_H__
+#define __GSM_SIM900_H__
+
+/*
+ * 0 - disable serial debugging
+ * 1 - enable serial  debugging 
+ */ 
+#define AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE (0)
+
+
+typedef enum T_GSM_SIM900_STATE_TAG
+{
+  AT_STATE_INIT_BEFORE_STARTUP_DELAY = 0,
+  AT_STATE_INIT_POWER_ON_START,  
+  AT_STATE_INIT_POWER_ON_WAIT_STARTUP,
+  AT_STATE_INIT_RESET,
+  AT_STATE_INIT_RESET_WAIT_STARTUP,
+  AT_STATE_INIT_SEQ_SEND_COMMAND,
+  AT_STATE_INIT_SEQ_SEND_COMMAND_WAIT_TRANSMISSION,
+  AT_STATE_INIT_SEQ_WAIT_RESPONSE,
+  AT_STATE_INIT_SEQ_PROCESS_RESPONSE,
+  AT_STATE_PROCESSOR_DELAY_AFTER_COMMAND,
+  AT_STATE_PROCESSOR_RESET_SIM_BOARD,
+  AT_STATE_PROCESSOR_IDDLE,
+  AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ,
+  AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ_WAIT_TRANSMISSION,
+  AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ_WAIT_RESPONSE,
+  AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ_PROCESS_RESPONSE,
+  AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_DELAY_AFTER_COMMAND,
+  AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ_DECODE_RESPONSE
+    
+}T_GSM_SIM900_STATE;
+
+
+void AT_Command_Processor_Init(void);
+void AT_Command_Processor_Main(void);
+
+
+unsigned char AT_Command_Processor_Send_URL_Message(char* strMessage);
+
+unsigned char  AT_Command_Is_New_Command_From_Server(void);
+unsigned char  AT_Command_Read_Last_Command_From_Server(void);
+void           AT_Command_Process_Command_From_Server(void);
+unsigned char* AT_Command_Get_Data_From_Last_Command_From_Server(void);
+
+/*
+ *  Callback functions
+ */
+  void AT_Command_Callback_Notify_Init_Finished(void);
+
+#endif /* __GSM_SIM900_H__ */

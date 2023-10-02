@@ -1,0 +1,49 @@
+command:
+
+        http://192.168.0.105/entry_new.php?x=862462030142276;1111111111111111111;0726734731;RDS;0;0;0;0;P;0;0;No_approver;IASI;PALAS_IASI;PALAS_PARTER;NV9;1
+        
+        http://145.239.84.165:35269/gsm/entry_new.php?x=220131329877;1111111111111111111;0726734732;RDS;256;256;256;256;A;0;0;No_approver;BUC_TEST_3;TEST_3;UNDER_TEST_3;NV10;1
+
+
+Responses:
+
+        CMDAServer is alive***********************************************
+
+----------------------------------------------------------------------------------
+
+Sunteţi sigur că vreţi să schimbaţi datele aparatului 862462030142276?
+
+Date vechi:
+Oraş, Localitate: IASI
+Locaţie: PALAS_IASI
+Detalii locaţie: PALAS_PARTER
+Număr de telefon: 0726734731
+
+
+Date noi:
+Oraş, Localitate: DEBUG_CITY
+Locaţie: DEBUG_LOCATION
+Detalii locaţie: DEBUG_DETAILS
+Număr de telefon: 1234567890
+
+
+      CMDTDEBUG_CITY****************************************************
+      CMDPDEBUG_LOCATION************************************************
+
+      CMDDDEBUG_DETAILS*************************************************
+
+      CMDN1234567890****************************************************
+
+
+      CMDQ**************************************************************     <<< reseteaza validator
+
+      CMDB**************************************************************     <<<< reseteaza monetar
+
+      CMDVNV10**********************************************************     <<<< reconfigurare tip aparat
+      CMDVNV9***********************************************************
+
+
+
+      >>>> A --- acknowledge after command ---
+
+http://192.168.0.105/entry_new.php?x=862462030142276;1111111111111111111;1234567890;RDS;1;1;1;1;A;0;0;No_approver;DEBUG_CITY;DEBUG_LOCATION;DEBUG_DETAILS;NV10;1
