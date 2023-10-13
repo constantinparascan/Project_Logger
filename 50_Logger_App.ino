@@ -1,6 +1,8 @@
 /* C.Parascan
  *  v1.0 - final bugs related to board reset solved - 03.04.2023
- *
+ *  v2.0 - major updates - 10.10.2023
+ *                       - remove Eth communication 
+ *                       - adapt for Com_Service interraction
  */
 
 #include "99_Automat_Board_cfg.h"
@@ -122,10 +124,13 @@ void Logger_App_Outputs_SetReset(void);
 void Logger_App_Build_Server_Req_Bill_Payment_Generic(unsigned char nFrameType, unsigned char nErrorValue);
 void Logger_App_Build_Server_Req_Bill_Payment(void);
 void Logger_App_Build_Server_Reset_Bill_Value_Response(void);
-unsigned char Logger_App_process_Server_commands(void);
 unsigned char Logger_App_Process_Buffer(void);
 
 
+
+/*
+ * Used for debugging porpuses
+ */
 #if(LOGGER_APP_DEBUG_SERIAL == 1)
 void Logger_App_Debug_Print_State(void)
 {
@@ -196,44 +201,130 @@ void Logger_App_pre_init_NvM_link(void)
   NvM_AttachRamImage((unsigned char *)&nNvM_RAM_Mirror_CH4, 4);
   NvM_AttachRamImage((unsigned char *)&nNvM_RAM_Mirror_CH5, 5);
 
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_SimNR  [0],  6);
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Town   [0],  7);
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Place  [0],  8);
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Details[0],  9);
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Device [0],  10);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_SimNR   [0],  6);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Town    [0],  7);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Place   [0],  8);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Details [0],  9);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Device  [0],  10);
 
 }
 
-
+/*
+ * Fill in the NvM blocks with default values 
+ *
+ *   ... the range of target NvM block ID's is 6->10 (because the other blocks are cyclically written on each bill validation)
+ *   - this special blocks are anly written by a special command received from server
+ *     therefore during first startups (virgin controller) it might be completly empty ... and could stay like that indefinetely until
+ *     an "update" command is issued !
+ *
+ */
 void Logger_App_Write_Default_Values_NvM(unsigned char nSlotWrite)
 {
 
   switch( nSlotWrite )
   {
 
-    case 1:
-      NvM_Write_Block(6);
+    case NVM_BLOCK_CHAN_6_ID:
+      NvM_Write_Block(NVM_BLOCK_CHAN_6_ID);
       break;
 
-    case 2:
-      NvM_Write_Block(7);
+    case NVM_BLOCK_CHAN_7_ID:
+      NvM_Write_Block(NVM_BLOCK_CHAN_7_ID);
       break;
 
-    case 3:
-      NvM_Write_Block(8);
+    case NVM_BLOCK_CHAN_8_ID:
+      NvM_Write_Block(NVM_BLOCK_CHAN_8_ID);
       break;
 
-    case 4:
-      NvM_Write_Block(9);
+    case NVM_BLOCK_CHAN_9_ID:
+      NvM_Write_Block(NVM_BLOCK_CHAN_9_ID);
       break;
 
-    case 5:
-      NvM_Write_Block(10);
+    case NVM_BLOCK_CHAN_10_ID:
+      NvM_Write_Block(NVM_BLOCK_CHAN_10_ID);
       break;
 
   }
 
 }
+
+/*
+ * API used to be called from exterior of module "Logger_App" with
+ *        only porpuse to reset to default the monetray registers, and associated flags
+ */
+void Logger_App_Callback_Command_Reset_Monetary(void)
+{
+
+  nNvM_RAM_Mirror_CH1 = 0; 
+  NvM_Write_Block( 1 );
+
+  nNvM_RAM_Mirror_CH2 = 0;
+  NvM_Write_Block( 2 );
+
+  nNvM_RAM_Mirror_CH3 = 0;
+  NvM_Write_Block( 3 );
+
+  nNvM_RAM_Mirror_CH4 = 0;
+  NvM_Write_Block( 4 );
+
+  nCH1_old = 0;
+  nCH2_old = 0;
+  nCH3_old = 0;
+  nCH4_old = 0;
+  nCH5_old = 0;
+  eMachineError_old = E_UNKNOWN;
+  nLastBillType = 0;
+
+}/* end function Logger_App_Callback_Command_Reset_Monetary */
+
+
+
+unsigned short Logger_App_GetChannelValue(unsigned char nChannValue)
+{
+  unsigned short nReturn = 0;
+
+  switch( nChannValue )
+  {
+    case 1:
+      nReturn = nCH1_old;
+      break;
+    
+    case 2:
+      nReturn = nCH2_old;
+      break;
+
+    case 3:
+      nReturn = nCH3_old;
+      break;
+    
+    case 4:
+      nReturn = nCH4_old;
+      break;
+
+    case 5:
+      nReturn = nCH5_old;
+      break;
+
+    default:
+      nReturn = sNV9plus.nBillValidator_err;
+      break;
+  }
+
+  return nReturn;
+}
+
+
+unsigned char Logger_App_Get_LastBillType(void)
+{
+  return nLastBillType;
+}
+
+unsigned char Logger_App_Get_LastErrorValue(void)
+{
+  return (unsigned char)sNV9plus.nBillValidator_err;
+}
+
+
 
 /* Exported API used to initialize the Logger App 
  *
@@ -247,7 +338,7 @@ void Logger_App_init(void)
    */
   unsigned char nStatus = 0;
 
-  #if(LOGGER_APP_DEBUG_SERIAL >= 1)
+  #if(LOGGER_APP_DEBUG_SERIAL >= 1) 
     Serial.begin(9600);
   #endif
 
@@ -358,7 +449,26 @@ void Logger_App_init(void)
   #if(LOGGER_APP_DEBUG_SERIAL == 1)
     snprintf(Logger_DebugPrintBuff, 50, "Logger INIT CH1= %d, CH2= %d, CH3= %d, CH4= %d ", sNV9plus.nCH1_bill, sNV9plus.nCH2_bill, sNV9plus.nCH3_bill, sNV9plus.nCH4_bill);
     Serial.println(Logger_DebugPrintBuff);
+
+
+    snprintf(Logger_DebugPrintBuff, 50, ">> %s", arrNvM_RAM_Mirror_Str_SimNR);
+    Serial.println(Logger_DebugPrintBuff);
+
+    snprintf(Logger_DebugPrintBuff, 50, ">> %s", arrNvM_RAM_Mirror_Str_Town);
+    Serial.println(Logger_DebugPrintBuff);
+    
+    snprintf(Logger_DebugPrintBuff, 50, ">> %s", arrNvM_RAM_Mirror_Str_Place);
+    Serial.println(Logger_DebugPrintBuff);
+
+
+    snprintf(Logger_DebugPrintBuff, 50, ">> %s", arrNvM_RAM_Mirror_Str_Details);
+    Serial.println(Logger_DebugPrintBuff);
+
+    snprintf(Logger_DebugPrintBuff, 50, ">> %s", arrNvM_RAM_Mirror_Str_Device);
+    Serial.println(Logger_DebugPrintBuff);
+
   #endif
+
 
   /* init application internal variables ... */
   nTransmissionToServer_IsPreparedForNewTransmission = 1;
@@ -367,50 +477,6 @@ void Logger_App_init(void)
 
 }
 
-unsigned short Logger_App_Get_Channel_Values(unsigned char nChannValue)
-{
-  unsigned short nReturn = 0;
-
-  switch( nChannValue )
-  {
-    case 1:
-      nReturn = nCH1_old;
-      break;
-    
-    case 2:
-      nReturn = nCH2_old;
-      break;
-
-    case 3:
-      nReturn = nCH3_old;
-      break;
-    
-    case 4:
-      nReturn = nCH4_old;
-      break;
-
-    case 5:
-      nReturn = nCH5_old;
-      break;
-
-    default:
-      nReturn = sNV9plus.nBillValidator_err;
-      break;
-  }
-
-  return nReturn;
-}
-
-
-unsigned char Logger_App_Get_LastBillType(void)
-{
-  return nLastBillType;
-}
-
-unsigned char Logger_App_Get_LastErrorValue(void)
-{
-  return (unsigned char)sNV9plus.nBillValidator_err;
-}
 
 
 
@@ -780,143 +846,6 @@ unsigned char Logger_App_Process_Buffer(void)
 }
 
 
-/* Message format CLIENT to SERVER    - send a generic request to server in order to check service availability 
- *
- *   - "/gsm/index.php"
- */
-void Logger_App_Build_Server_Request_Service_Availability(void)
-{
-  char arrDummy[50];
-
-
-  /*
-   * Example of a request:
-   *
-   * http://145.239.84.165:35269/gsm/index.php
-   */
-
-
-  Eth_Service_Client_ClearTxBuff();
-  Eth_Service_Client_AddTxData("GET /gsm/index.php");        /* PRODUCTION address ... !!!  */
-
-  Eth_Service_Client_AddTxData( " HTTP/1.1");
-
-  Eth_Service_Client_SendRequest(); 
-}
-
-
-
-unsigned char Logger_App_Process_Server_Request_Service_Availability(void)
-{
-  unsigned char nReturn = 0;
-
-  char *ServerRespData = NULL;
-  unsigned short nBufferLen = 0;
-  unsigned short nCharsCount = 0;
-  unsigned short nIdx = 0;
-
-
-  nBufferLen = Eth_Service_Client_Get_RxBuffer(&ServerRespData);
-
-  //#if(LOGGER_APP_DEBUG_SERIAL == 1)
-    Serial.print("Server:  ");
-    Serial.write(ServerRespData, nBufferLen);
-    Serial.println();    
-  //#endif
-
-  for(nIdx = 0; nIdx < nBufferLen; nIdx ++)  
-  {
-    if( ( ServerRespData[nIdx] >= 32 )  && ( ServerRespData[nIdx] <= 126 ) )   /* al numeric and alfa-numeric chars ... from ascii table .. */
-    {
-      nCharsCount ++;
-    }
-  }
-  
-  if(nCharsCount > 50)
-  {
-    nReturn = 1;
-  }
-  else
-  {
-    nReturn = 0;
-  }
-
-
-  return nReturn;
-}
-
-
-
-/* [ToDo] --- this function should be able to stack up to 10 commands ... in case you shuld process them later
- *    
- *
- */
-
-unsigned char Logger_App_process_Server_commands(void)
-{
-  unsigned char nReturn = 0;
-
-  char *ServerRespData = NULL;
-  unsigned short nBufferLen = 0;
-  unsigned short nIdx = 0;
-
-
-  nBufferLen = Eth_Service_Client_Get_RxBuffer(&ServerRespData);
-
-  #if(LOGGER_APP_DEBUG_SERIAL == 1)
-    //Serial.print("Server:  ");
-    //Serial.write(ServerRespData, nBufferLen);
-    //Serial.println();    
-  #endif
-
-
-  for(nIdx = 0; nIdx < nBufferLen; nIdx ++)  
-  {
-    //Serial.write(ServerRespData[nIdx]);
-    
-    if( (ServerRespData[nIdx] == 0) || (ServerRespData[nIdx] == '*'))
-      break;
-
-    if(nIdx < (nBufferLen - 5))
-    {
-      if( (ServerRespData[nIdx] == 'C') && (ServerRespData[nIdx + 1] == 'M') && (ServerRespData[nIdx + 2] == 'D') )
-      {
-        /* Normal Alive response ... */
-        if( ServerRespData[nIdx + 3] == 'A') 
-        {
-          nReturn = 1;
-
-          #if(LOGGER_APP_DEBUG_SERIAL == 1)
-            Serial.println("Server response --> CMDA ");
-          #endif
-
-          /* no command */
-          nServerCommandCode = 0;          
-
-          break;
-        }
-
-        /* reset cash request from server .... */
-        if( ServerRespData[nIdx + 3] == 'B') 
-        {
-          nReturn = 1;
-
-          #if(LOGGER_APP_DEBUG_SERIAL == 1)
-            Serial.println("Server response --> CMDB ");
-          #endif
-
-          /* reset command received ... */
-          nServerCommandCode = 'B';
-
-          break;
-        }
-
-      }
-    }
-  }
-
-  return nReturn;
-}
 
 
 /* v0.1
@@ -1040,7 +969,7 @@ void Logger_App_main(void)
         /*   but due to CPU load ... we only check here ! */
         /*   this should suffice ... since we don't transmit anything if there is no USART communication */
         /*                                                                                               */
-        nTransmissionToServer_IsPreparedForNewTransmission = Eth_Service_Client_IsReadyForNewCommand();
+        nTransmissionToServer_IsPreparedForNewTransmission = Com_Service_Client_Is_Comm_Free(); //Eth_Service_Client_IsReadyForNewCommand();
       }
       else
       /************************************************************
@@ -1533,7 +1462,7 @@ void Logger_App_main(void)
         *
         *    - A - alive
         */
-        (void)Logger_App_process_Server_commands();
+        // (void)Logger_App_process_Server_commands();   ---> not needed anymore ... in Com !!!
       }
 
       /* main processing state ... */
@@ -1588,11 +1517,316 @@ void Logger_App_main(void)
 }/* void Logger_App_main(void) */
 
 
-/******************************************************************************
+/* v0.2
  *
- *                    OUTPUT PINS LOGIC 
+ *   !!! Main Logger state machine !!!
  *
- ******************************************************************************/
+ *  - function needs cyclic execution in order to process it's state machine
+ *  - function has been adapted to be executed togather with the "COM" layer - 11.10.2023
+ */
+void Logger_App_main_v2(void)
+{
+  unsigned char  nReceiveCountBytes = 0;
+  unsigned short nChanValTemp = 0;
+
+  #if(LOGGER_APP_DEBUG_SERIAL == 1)
+    Logger_App_Debug_Print_State();
+  #endif
+
+  switch(LoggerAppState)
+  {
+
+    /* 
+     * currently nothing to do ... in this state ... go to init 
+     */
+    case E_LOGGER_APP_UNININT:
+
+    /*
+     *
+     */
+    case E_LOGGER_APP_INIT:
+      LoggerAppState = E_LOGGER_APP_STARTUP_DELAY;
+
+      /* startup delay required for all other layers to complete initialization ... */
+      /*                  delay = 1ms * LOG_APP_STARTUP_DELAY                       */
+      nLoggerAppStartupDelay = LOG_APP_STARTUP_DELAY;
+
+    break;
+
+
+    /* Startup delay used to 
+     *   wait for all other initialization of internal devices
+     *   like ETH, that can take several reccurences ... 
+     */
+    case E_LOGGER_APP_STARTUP_DELAY:
+
+      /* if we need to continue in this waiting state ... */
+      if(nLoggerAppStartupDelay > 0)
+      {
+        nLoggerAppStartupDelay --;
+      }
+      /* or we can go on ... */
+      else
+      {
+
+        /*
+         * Send a startup message ...
+         */
+        LoggerAppState = E_LOGGER_APP_PROCESS_MESSAGES;
+
+        /* 
+         * Internal variable initialization
+         */
+        
+        itterUSART_withoutRX = 0;
+        nLoggerMsgBuffIDX_Rx = 0;
+        nNew_Comm_Frame_Consumed = 0;
+
+        nFirstRxFrame_AfterReset = 1;
+      }
+
+    break;
+
+
+    /*
+     *  ToDo ----->>> split this HUGE STATE !!!!
+     *
+     */
+
+
+    /******************************************************/
+    /*     
+    /*               Main processing state
+    /*    
+    /******************************************************/ 
+    case E_LOGGER_APP_PROCESS_MESSAGES:
+
+      /* returns 0 if no USART bytes have been received since last call !
+       *   otherwise the user buffer index will also be updated ... indicating the last free position
+       */
+      nReceiveCountBytes = USART_Has_Received_Data();
+
+      /************************************/
+      /*      frame identification and    */
+      /*      separation                  */
+      /*                                  */
+      /************************************/
+      
+      /* 
+       * If we have something in the Rx buffer ... then prepare to detect a frame gap
+       */      
+      if(nReceiveCountBytes > 0)
+      {
+ 
+        #if(LOGGER_APP_DEBUG_SERIAL == 1)
+          //Serial.println(" - Data received - ");
+        #endif
+        
+        /* new data received .... reset inter-frame gap detector ... */
+        itterUSART_withoutRX = 0;
+
+
+        /*
+         * indicates that there is no new frame that can be 
+         *   processed by the user
+         *
+         */
+        nNew_Comm_Frame_Consumed = 0;
+
+
+
+        /* 
+         * check to see if communication established with the server
+         */
+        nTransmissionToServer_IsPreparedForNewTransmission = Com_Service_Client_Is_Comm_Free(); 
+      }
+      else
+      /************************************************************
+       *
+       *   ALL processing is done during communication gaps !
+       *
+       ************************************************************/
+      {
+        /* increment silence counter */
+        if(itterUSART_withoutRX < _MAX_INTER_FRAME_TIME_)
+        {
+          /* a new itteration has ended without any Rx communication on the bus ... */
+          itterUSART_withoutRX ++;
+        }      
+        /*
+         *
+         * Communication GAP detected !!! 
+         *
+         */
+        else
+        {
+          /* an inter frame delay has been detected and the frame has not been consumed ... */
+          if(  nNew_Comm_Frame_Consumed == 0 )
+          {
+
+            /* 
+             *  look in the USART buffer for the full frame !
+             */
+            (void)USART_Receive_Bytes(arrLoggerReceiveBytes, &nLoggerMsgBuffIDX_Rx, _MAX_RX_COMM_BUFFER_SIZE_);
+
+
+            #if(LOGGER_APP_DEBUG_SERIAL == 2)
+              unsigned char idx;            
+              for(idx = 0; idx < nLoggerMsgBuffIDX_Rx; idx ++)
+              {
+                Serial.print(arrLoggerReceiveBytes[idx], HEX);
+                Serial.print(" ");
+              }
+              Serial.write(arrLoggerReceiveBytes, nLoggerMsgBuffIDX_Rx);
+              Serial.println();
+            #endif
+
+
+            /* 
+             * Try to identify frame and extract data if valid ... 
+             */
+            if( Logger_App_Process_Buffer() > 0 )
+            {
+
+              #if(LOGGER_APP_DEBUG_SERIAL == 1)
+                snprintf(Logger_DebugPrintBuff, 50, "Log CH1=%d, CH1_O=%d, CH2=%d, CH2_O=%d, CH3=%d, CH3_O=%d, CH4=%d, CH4_O=%d, ERR=%d, ERR_O=%d", sNV9plus.nCH1_bill, nCH1_old, sNV9plus.nCH2_bill, nCH2_old, sNV9plus.nCH3_bill, nCH3_old, sNV9plus.nCH4_bill, nCH4_old, sNV9plus.nBillValidator_err, eMachineError_old);
+                Serial.println(Logger_DebugPrintBuff);
+              #endif
+
+
+              /* !!! extract channel values !!! 
+               *
+               *    --- we have a CHANGE in the CHANNEL BILL content ??? 
+               */
+              if( ( ( nCH1_old < sNV9plus.nCH1_bill ) || ( nCH2_old < sNV9plus.nCH2_bill ) || \
+                    ( nCH3_old < sNV9plus.nCH3_bill ) || ( nCH4_old < sNV9plus.nCH4_bill ) || \
+                    (eMachineError_old != sNV9plus.nBillValidator_err) ) )
+              {
+
+                nLastBillType = 0;
+
+                /*
+                 *
+                 * Check to see if there is a new bill accepted !
+                 *
+                 */
+                if(nCH1_old != sNV9plus.nCH1_bill)
+                {
+                  nLastBillType = 1;
+                  nNvM_RAM_Mirror_CH1 = sNV9plus.nCH1_bill;
+
+                  /* updates must be stored in NvM also ... */
+                  NvM_Write_Block(1);
+                }
+                else
+                {
+                  if(nCH2_old != sNV9plus.nCH2_bill)
+                  {
+                    nLastBillType = 2;
+                    nNvM_RAM_Mirror_CH2 = sNV9plus.nCH2_bill;
+
+                    /* updates must be stored in NvM also ... */                    
+                    NvM_Write_Block(2);
+                  }
+                  else
+                  {
+                    if(nCH3_old != sNV9plus.nCH3_bill)
+                    {
+                      nLastBillType = 3;
+                      nNvM_RAM_Mirror_CH3 = sNV9plus.nCH3_bill;
+
+                      /* updates must be stored in NvM also ... */                      
+                      NvM_Write_Block(3);
+                    }
+                    else
+                    {
+                      nLastBillType = 4;
+                      nNvM_RAM_Mirror_CH4 = sNV9plus.nCH4_bill;
+
+                      /* updates must be stored in NvM also ... */
+                      NvM_Write_Block(4);
+                    }
+                  }
+                }
+
+
+                /* *******************  */
+                /*                      */
+                /*   we have new data   */
+                /*  ... must inform     */
+                /*    server            */
+                /*                      */
+                /* *******************  */
+
+                /* Has been an error detected ? */
+                if(sNV9plus.eNV9State > NV9_STATE_RUN_NO_ERROR)
+                {
+
+                  #if(LOGGER_APP_DEBUG_SERIAL == 1)
+                    Serial.println("---------- ERROR ------------");
+                  #endif
+
+                  AT_Command_Callback_Request_ERROR_Status_Transmission();
+                  
+                }
+                else
+                /* inform server about a new bill reception ... */
+                {
+
+                  #if(LOGGER_APP_DEBUG_SERIAL == 1)
+                    Serial.println("---------- DATA BILLS ------------");
+                  #endif
+
+                  AT_Command_Callback_Request_Bill_Status_Transmission();
+                }
+
+                nCH1_old = sNV9plus.nCH1_bill;
+                nCH2_old = sNV9plus.nCH2_bill;
+                nCH3_old = sNV9plus.nCH3_bill;
+                nCH4_old = sNV9plus.nCH4_bill;
+                nCH5_old = sNV9plus.nCH5_bill;
+
+                eMachineError_old = sNV9plus.nBillValidator_err;
+                eMachineState_old = sNV9plus.eNV9State;
+
+                nTransmissionToServer_IsPreparedForNewTransmission = 0;
+
+              } /* end if (nCH1_old < sNV9plus.nCH1_bill) || (nCH2_old < sNV9plus.nCH2_bill) ||  ....*/
+
+            }/* end if(Logger_App_Process_Buffer() > 0) */
+
+
+            nLoggerMsgBuffIDX_Rx = 0;
+
+            /* indicates that the last received frame has been processed already !  ... and we must wait for a new frame communication */
+            nNew_Comm_Frame_Consumed = 1;
+          }
+
+        }
+
+
+      }/* end else if(nReceiveCountBytes > 0) */
+
+    break;
+
+
+    default: 
+      LoggerAppState = E_LOGGER_APP_INIT;
+    break;
+
+  }/* end switch LoggerAppState */
+
+
+}/* void Logger_App_main_v2(void) */
+
+
+
+/***********************************************************************************************************
+ *
+ *                    OUTPUT PINS LOGIC / used to reset (cut power supply of NV10)
+ *                           if an reset command is issued by the server !
+ *
+ ***********************************************************************************************************/
 
 T_LoggerAppOutputPinState LoggerAppOutputState_PIN_RESET = E_LOGGER_OUTPUT_INNACTIVE;
 unsigned short nOutputPinResetBill_Delay = OUTPUT_PIN_RESET_BILL_DELAY_ITTER;
@@ -1670,62 +1904,3 @@ void Logger_App_Output_Pins_main(void)
 }/* end void Logger_App_Output_Pins_main(void) */
 
 
-/* v0.1
- *   - detect configuration of the board
- *  
- *   CONFIG_1
- *
- *    - 0 - serial configuration
- *    - 1 - parallel configuration
- *
- *   CONFIG_2
- *
- *    - 0 - normal opperation
- *    - 1 - serial/paralel configuration with enhanced bill insertion logic
- *
- *   CONFIG_3
- *
- *    - 0 - ETH communication with server
- *    - 1 - GPRS communication with server using AT commands
- */
-
-
-/* delay 62.5ns on a 16MHz AtMega */
-#define NOP __asm__ __volatile__ ("nop\n\t")
-
-unsigned char Logger_App_DetectConfiguration (void)
-{
-  unsigned char nReturnConfig = 0;
-  int nReadOut = 0;
-
-  pinMode(HW_CONFIG_PIN_1, INPUT);
-  pinMode(HW_CONFIG_PIN_2, INPUT);
-  pinMode(HW_CONFIG_PIN_3, INPUT);
-
-
-  NOP;
-  NOP;
-  NOP;
-  NOP;
-
-
-  nReadOut = digitalRead(HW_CONFIG_PIN_3);
-  if( nReadOut )
-      nReturnConfig |= 0x01;
-
-  nReturnConfig = nReturnConfig << 1;
-
-  nReadOut = digitalRead(HW_CONFIG_PIN_2);
-  if( nReadOut )
-      nReturnConfig |= 0x01;
-
-  nReturnConfig = nReturnConfig << 1;
-
-  nReadOut = digitalRead(HW_CONFIG_PIN_1);
-  if( nReadOut )
-      nReturnConfig |= 0x01;
-
-
-  return nReturnConfig;
-
-}/* end function Logger_App_DetectConfiguration */

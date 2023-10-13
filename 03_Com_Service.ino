@@ -1,10 +1,14 @@
 #include "03_Com_Service.h"
 #include "03_Com_Service_cfg.h"
 #include "99_Automat_Board_cfg.h"
+#include "99_Automat_Board_Config.h"
 #include "05_Eth_Service_Client.h"
 #include "60_GSM_SIM900.h"
 
 #include "50_Logger_App_Parallel.h"
+#include "50_Logger_App.h"
+
+
 
 #define COM_SERV_CONN_STAT_OFFLINE (0)
 #define COM_SERV_CONN_STAT_QUERRY_IN_PROGRESS (1)
@@ -51,6 +55,9 @@ unsigned char nFlags_Com_Service_StartupMessageTransmitted = 0;
 /* delay used for the "PING" message */
 unsigned short nCom_Service_PingToServer_Delay = LOG_APP_PING_TO_SERVER_DELAY;
 
+/* used to keep the HW configuration of the board ... */
+unsigned char  nCom_HW_Config_TYPE_Local = 0;
+
 /* ************************************************************** */
 
 
@@ -73,6 +80,7 @@ void Com_Service_Build_Server_Request_Service_Availability_ETH(void);
 #define COM_FLAGS_CALLBACK_AT_COM_NO_ERROR_RECOVERY   (0x04)
 
 #define COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL (0x10)
+#define COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME (0x20)
 
 unsigned char nCallbackFlags = 0x00;
 
@@ -93,6 +101,16 @@ void AT_Command_Callback_Request_Bill_Status_Transmission(void)
 {
   nCallbackFlags |= COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL;
 }
+
+/*
+ * Function called each time an ERROR transmission to server is requested !
+ */
+
+void AT_Command_Callback_Request_ERROR_Status_Transmission(void)
+{
+  nCallbackFlags |= COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME;
+}
+
 
 /*  *****************************************
  *
@@ -125,6 +143,11 @@ void Com_Service_Init(void)
   sComServiceInternals.nEthConnectionStatus = COM_SERV_CONN_STAT_OFFLINE;
   sComServiceInternals.nATConnectionStatus  = COM_SERV_CONN_STAT_OFFLINE;  
 
+  /*
+   * Make sure that the Com init function is called before the HW configuration is read-out ... 
+   */
+   nCom_HW_Config_TYPE_Local = Board_Config_Get_HW_ConfigType();
+
 }/* end function Com_Service_Init */
 
 
@@ -139,8 +162,9 @@ void Com_Service_main(void)
   unsigned short nTempCh3 = 0;
   unsigned short nTempCh4 = 0;
   unsigned char  nLastBillTemp = 0;
-  unsigned char nStatus = 0;
-  unsigned char nCommandFromServer = 0;
+  unsigned char  nLastErrorTemp = 0;
+  unsigned char  nStatus = 0;
+  unsigned char  nCommandFromServer = 0;
 
   switch( eComServiceState )
   {
@@ -191,14 +215,26 @@ void Com_Service_main(void)
      */
     case COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP:
       
-      nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
-      nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
-      nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
-      nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
+      if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
+      {
+        nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
+        nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
+        nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
+        nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
+      }
+      else
+        if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
+        {
+          nTempCh1 = Logger_App_GetChannelValue( 1 );
+          nTempCh2 = Logger_App_GetChannelValue( 2 );
+          nTempCh3 = Logger_App_GetChannelValue( 3 );
+          nTempCh4 = Logger_App_GetChannelValue( 4 );
+        }        
 
       nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'S', 0 );
-      //nStatus = 1;
+      //nStatus = 1; // for debug ...
       
+      /* go to next state only if there has been a successful start command ... */
       if( nStatus > 0 )
       {
         eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT;
@@ -216,6 +252,9 @@ void Com_Service_main(void)
      */
     case COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT:
 
+      /* 
+       * Full com only after SIM900 driver has reached stable state ...
+       */
       if( AT_Command_Processor_Is_Iddle() > 0 )
       {      
         eComServiceState = COM_SERVICE_STATE_FULL_COM;
@@ -243,6 +282,7 @@ void Com_Service_main(void)
     {
 
       /*
+       *
        * Monitor PING
        *    
        */
@@ -253,13 +293,26 @@ void Com_Service_main(void)
          *
          */
 
-        nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
-        nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
-        nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
-        nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
+        if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
+        {
+          nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
+          nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
+          nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
+          nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
+        }
+        else
+          if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
+          {
+            nTempCh1 = Logger_App_GetChannelValue( 1 );
+            nTempCh2 = Logger_App_GetChannelValue( 2 );
+            nTempCh3 = Logger_App_GetChannelValue( 3 );
+            nTempCh4 = Logger_App_GetChannelValue( 4 );
+          }        
+
+
 
         nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'P', 0 );
-        //nStatus = 1;
+        //nStatus = 1;  // for debug porpuses ...
       
         if( nStatus > 0 )
         {
@@ -280,15 +333,30 @@ void Com_Service_main(void)
 
 
       /* 
-       * send a normal frame ... ??
+       *
+       * SEND a normal frame ... 
+       *
        */
-      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL )      
+      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL )       
       {
-        nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
-        nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
-        nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
-        nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
-        nLastBillTemp = Logger_App_Parallel_GetLastBillType();
+
+        if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
+        {
+          nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
+          nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
+          nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
+          nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
+          nLastBillTemp = Logger_App_Parallel_GetLastBillType();
+        }
+        else
+          if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
+          {
+            nTempCh1 = Logger_App_GetChannelValue( 1 );
+            nTempCh2 = Logger_App_GetChannelValue( 2 );
+            nTempCh3 = Logger_App_GetChannelValue( 3 );
+            nTempCh4 = Logger_App_GetChannelValue( 4 );
+            nLastBillTemp = Logger_App_Get_LastBillType();
+          }
 
         nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v2(nTempCh1, nTempCh2, nTempCh3, nTempCh4, nLastBillTemp );
         //nStatus = 1;
@@ -304,7 +372,48 @@ void Com_Service_main(void)
 
         }
 
-      }
+      }/* end if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL )  ... */
+
+
+
+      /* 
+       *
+       * SEND an ERROR frame ... 
+       *
+       */
+      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME )       
+      {
+
+        /*
+         * PARALLEL has no ERROR transmission frames ... YET ... only CCTALK
+         */
+
+        if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
+        {
+          nTempCh1 = Logger_App_GetChannelValue( 1 );
+          nTempCh2 = Logger_App_GetChannelValue( 2 );
+          nTempCh3 = Logger_App_GetChannelValue( 3 );
+          nTempCh4 = Logger_App_GetChannelValue( 4 );
+          nLastBillTemp = Logger_App_Get_LastBillType();
+          nLastErrorTemp = Logger_App_Get_LastErrorValue();
+
+          nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, nLastBillTemp, 'E',  nLastErrorTemp);
+          //nStatus = 1;
+      
+          if( nStatus > 0 )
+          {
+
+            nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME;
+
+            #if(COM_SERVICE_DEBUG_ENABLE == 1)
+              Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM --> Send ERROR Req ");
+            #endif
+
+          }
+
+        }
+
+      }/* end if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME )  ... */
 
 
       if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_ERROR )
@@ -321,28 +430,45 @@ void Com_Service_main(void)
       }
 
 
-      /* see if any new commands ... */
+      /* 
+       *
+       *   see if any new commands from Server !!! ... 
+       *       
+       */
       if( AT_Command_Is_New_Command_From_Server() != 0 )
       {
         nCommandFromServer = AT_Command_Read_Last_Command_From_Server();
 
 
         /* RESET Monetary command ? */
-        if(nCommandFromServer == 'B')
+        if( nCommandFromServer == 'B' )
         {
-
-          Logger_App_Parallel_Callback_Command_Reset_Monetary();
+          if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
+          {
+            Logger_App_Parallel_Callback_Command_Reset_Monetary();
          
-          nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
-          nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
-          nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
-          nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
-          
+            nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
+            nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
+            nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
+            nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
+          }
+          else
+            if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
+            {
+              Logger_App_Callback_Command_Reset_Monetary();
+
+              nTempCh1 = Logger_App_GetChannelValue( 1 );
+              nTempCh2 = Logger_App_GetChannelValue( 2 );
+              nTempCh3 = Logger_App_GetChannelValue( 3 );
+              nTempCh4 = Logger_App_GetChannelValue( 4 );
+            }
+
         }/* end if(nCommandFromServer == 'B') */
         else
           if(nCommandFromServer == 'N')
           {
-            //strcpy( Logger_App_Parallel_GetDataPointer(0), );
+            //strcpy( arrNvM_RAM_Mirror_Str_SimNR, AT_Command_Get_Data_From_Last_Command_From_Server() );
+            //NvM_Write_Block(NVM_BLOCK_CHAN_6_ID);
           }
 
 
@@ -411,20 +537,9 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
     return nReturn;  
   }  
 */
-  strcpy(arrLocalBuff, "AT+HTTPPARA=\"URL\",\"http://145.239.84.165:35269/gsm/entry_new.php?x=" LOG_APP_IMEI_CARD ";" LOG_APP_SIM_SN ";" LOG_APP_SIM_PHONE_NR ";" LOG_APP_SIM_OPERATOR ";");
-
-  //strcat(arrLocalBuff, LOG_APP_IMEI_CARD );  
-  //strcat(arrLocalBuff, ";");
-  
-  //strcat(arrLocalBuff, LOG_APP_SIM_SN );  
-  //strcat(arrLocalBuff, ";");
-
-  //strcat(arrLocalBuff, LOG_APP_SIM_PHONE_NR );  
-  //strcat(arrLocalBuff, ";");
-
-  //strcat(arrLocalBuff, LOG_APP_SIM_OPERATOR );  
-  //strcat(arrLocalBuff, ";");
-
+  strcpy(arrLocalBuff, "AT+HTTPPARA=\"URL\",\"http://" SERVER_ADDRESS_DESTINATION ":" SERVER_ADDRESS_DESTINATION_PORT SERVER_ADDRESS_GET_URL_COMMAND_X LOG_APP_IMEI_CARD ";" LOG_APP_SIM_SN ";" );
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_SimNR);
+  strcat(arrLocalBuff, ";" LOG_APP_SIM_OPERATOR ";");
 
   snprintf(arrDummy, 50,"%d;%d;%d;%d;%d;0;0;", nChan1, nChan2, nChan3, nChan4, nLastBillType);
   strcat(arrLocalBuff, arrDummy);
@@ -432,16 +547,16 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
   strcat(arrLocalBuff, LOG_APP_VERSION_MAJOR );  
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_TOWN );  
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Town );  
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_PLACE );  
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Place );  
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_DETAILS );  
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Details );  
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_DEVICE_TYPE );  
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Device );  
   strcat(arrLocalBuff, ";");
 
   strcat(arrLocalBuff, LOG_APP_DEFAULT_RSSI );  
@@ -485,19 +600,11 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
     return nReturn;  
   }  
 */
-  strcpy(arrLocalBuff, "AT+HTTPPARA=\"URL\",\"http://145.239.84.165:35269/gsm/entry_new.php?x=" LOG_APP_IMEI_CARD ";" LOG_APP_SIM_SN ";" LOG_APP_SIM_PHONE_NR ";" LOG_APP_SIM_OPERATOR ";");
+  //strcpy(arrLocalBuff, "AT+HTTPPARA=\"URL\",\"http://145.239.84.165:35269/gsm/entry_new.php?x=" LOG_APP_IMEI_CARD ";" LOG_APP_SIM_SN ";" LOG_APP_SIM_PHONE_NR ";" LOG_APP_SIM_OPERATOR ";");
 
-  //strcat(arrLocalBuff, LOG_APP_IMEI_CARD );  
-  //strcat(arrLocalBuff, ";");
-  
-  //strcat(arrLocalBuff, LOG_APP_SIM_SN );  
-  //strcat(arrLocalBuff, ";");
-
-  //strcat(arrLocalBuff, LOG_APP_SIM_PHONE_NR );  
-  //strcat(arrLocalBuff, ";");
-
-  //strcat(arrLocalBuff, LOG_APP_SIM_OPERATOR );  
-  //strcat(arrLocalBuff, ";");
+  strcpy(arrLocalBuff, "AT+HTTPPARA=\"URL\",\"http://" SERVER_ADDRESS_DESTINATION ":" SERVER_ADDRESS_DESTINATION_PORT SERVER_ADDRESS_GET_URL_COMMAND_X LOG_APP_IMEI_CARD ";" LOG_APP_SIM_SN ";" );
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_SimNR);
+  strcat(arrLocalBuff, ";" LOG_APP_SIM_OPERATOR ";");
 
 
   snprintf(arrDummy, 50,"%d;%d;%d;%d;", nChan1, nChan2, nChan3, nChan4);
@@ -575,16 +682,20 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
   strcat(arrLocalBuff, LOG_APP_VERSION_MAJOR );  
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_TOWN );  
+  //strcat(arrLocalBuff, LOG_APP_TOWN ); 
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Town);
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_PLACE );  
+  //strcat(arrLocalBuff, LOG_APP_PLACE );
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Place);
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_DETAILS );  
+  //strcat(arrLocalBuff, LOG_APP_DETAILS );  
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Details );  
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_DEVICE_TYPE );  
+  //strcat(arrLocalBuff, LOG_APP_DEVICE_TYPE );  
+  strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Device );  
   strcat(arrLocalBuff, ";");
 
   strcat(arrLocalBuff, LOG_APP_DEFAULT_RSSI );  
@@ -655,7 +766,7 @@ void Com_Service_Build_Server_Request_Service_Availability_ETH(void)
 
 
   Eth_Service_Client_ClearTxBuff();
-  Eth_Service_Client_AddTxData( SERVER_ADDRESS_GET_URL_AVAILABILITY ); 
+  Eth_Service_Client_AddTxData( "GET " SERVER_ADDRESS_GET_URL_AVAILABILITY ); 
 
   Eth_Service_Client_AddTxData( " HTTP/1.1");
 
@@ -741,7 +852,7 @@ void Com_Service_Build_Server_Req_Bill_Payment_Generic( unsigned char nFrameType
   //Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");
   //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");
   //----------------------------------------- Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");    /* PRODUCTION address ... !!!  */
-  Eth_Service_Client_AddTxData( SERVER_ADDRESS_GET_URL_COMMAND_X );
+  Eth_Service_Client_AddTxData( "GET " SERVER_ADDRESS_GET_URL_COMMAND_X );
   //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");      /* LOCAL Tests ! address  !!!  */
 
   Eth_Service_Client_AddTxData( LOG_APP_IMEI_CARD ";");
@@ -758,7 +869,7 @@ void Com_Service_Build_Server_Req_Bill_Payment_Generic( unsigned char nFrameType
    * Add type of event
    */ 
 
-  snprintf(arrDummy, 50,"%d;%d;%d;%d;", Logger_App_Get_Channel_Values(1), Logger_App_Get_Channel_Values(2), Logger_App_Get_Channel_Values(3), Logger_App_Get_Channel_Values(4));
+  snprintf(arrDummy, 50,"%d;%d;%d;%d;", Logger_App_GetChannelValue(1), Logger_App_GetChannelValue(2), Logger_App_GetChannelValue(3), Logger_App_GetChannelValue(4));
   Eth_Service_Client_AddTxData(arrDummy);   
 
   /*   - 1 byte

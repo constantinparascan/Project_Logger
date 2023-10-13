@@ -56,7 +56,7 @@ void Logger_App_init(void);
 void Logger_App_cyclic_1sec(void);
 void Logger_App_main(void);
 
-unsigned short Logger_App_Get_Channel_Values(unsigned char nChannValue);
+unsigned short Logger_App_GetChannelValue(unsigned char nChannValue);
 unsigned char  Logger_App_Get_LastBillType(void);
 unsigned char  Logger_App_Get_LastErrorValue(void);
 

@@ -2,7 +2,7 @@
 #define __COM_SERVICE_H__
 
 
-#define COM_SERVICE_DEBUG_ENABLE (1)
+#define COM_SERVICE_DEBUG_ENABLE (0)
 
 
 /* Define communication mode of the board ... */
@@ -50,5 +50,6 @@ unsigned char Com_Service_Client_Is_Comm_Free(void);
 
 void AT_Command_Callback_Notify_Init_Finished(void);
 void AT_Command_Callback_Request_Bill_Status_Transmission(void);
+void AT_Command_Callback_Request_ERROR_Status_Transmission(void);
 
 #endif /* __COM_SERVICE_H__ */

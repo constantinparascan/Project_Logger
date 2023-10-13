@@ -12,7 +12,7 @@
  * 
  *          SLOT 99 - debug
  */
-#define BOARD_CONFIG_SLOT (3)    /* <<<------------------------- CONFIG the Board !!! */
+#define BOARD_CONFIG_SLOT (4)    /* <<<------------------------- CONFIG the Board !!! */
 
 
 /* ---------------------------*/
@@ -86,10 +86,10 @@
  * Defines the server IPv4 address
  */
 #define SERVER_ADDRESS_DESTINATION "145.239.84.165"        /* -- used in production  -- */
-#define SERVER_ADDRESS_DESTINATION_PORT (35269)            /* -- used in production  -- */
+#define SERVER_ADDRESS_DESTINATION_PORT "35269"            /* -- used in production  -- */
 
-#define SERVER_ADDRESS_GET_URL_COMMAND_X      "GET /gsm/entry_new.php?x="        /* used in production */
-#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "GET /gsm/index.php"               /* used in production */
+#define SERVER_ADDRESS_GET_URL_COMMAND_X      "/gsm/entry_new.php?x="        /* used in production */
+#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "/gsm/index.php"               /* used in production */
 
 /*
  * SIM card details
@@ -153,10 +153,10 @@
  * Defines the server IPv4 address
  */
 #define SERVER_ADDRESS_DESTINATION "145.239.84.165"        /* -- used in production  -- */
-#define SERVER_ADDRESS_DESTINATION_PORT (35269)            /* -- used in production  -- */
+#define SERVER_ADDRESS_DESTINATION_PORT "35269"            /* -- used in production  -- */
 
-#define SERVER_ADDRESS_GET_URL_COMMAND_X      "GET /gsm/entry_new.php?x="        /* used in production */
-#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "GET /gsm/index.php"               /* used in production */
+#define SERVER_ADDRESS_GET_URL_COMMAND_X      "/gsm/entry_new.php?x="        /* used in production */
+#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "/gsm/index.php"               /* used in production */
 
 /*
  * SIM card details
@@ -182,7 +182,7 @@
 
 /******************************************************
  * 
- *               Board ethernet config slot 3
+ *               Board SIM900 config slot 3
  *
  ******************************************************/
  /*
@@ -224,10 +224,10 @@
  * Defines the server IPv4 address
  */
 #define SERVER_ADDRESS_DESTINATION "145.239.84.165"        /* -- used in production  -- */
-#define SERVER_ADDRESS_DESTINATION_PORT (35269)            /* -- used in production  -- */
+#define SERVER_ADDRESS_DESTINATION_PORT "35269"            /* -- used in production  -- */
 
-#define SERVER_ADDRESS_GET_URL_COMMAND_X      "GET /gsm/entry_new.php?x="        /* used in production */
-#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "GET /gsm/index.php"               /* used in production */
+#define SERVER_ADDRESS_GET_URL_COMMAND_X      "/gsm/entry_new.php?x="        /* used in production */
+#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "/gsm/index.php"               /* used in production */
 
 
 /*
@@ -248,6 +248,78 @@
 #define LOG_APP_DEFAULT_RSSI "1"              /* 2   chars MAX - including NULL */
 
 #endif /* #if(BOARD_CONFIG_SLOT == 3) */
+
+
+
+/******************************************************
+ * 
+ *               Board SIM900 config slot 4
+ *
+ ******************************************************/
+ /*
+  *
+  * --- using SIM900 communication module ---
+  *
+  */
+#if(BOARD_CONFIG_SLOT == 4) 
+
+/*
+ *  ETH Configurations 
+ */
+
+/* 
+ * Defines the MAC address of the board
+ */
+#define MAC_BYTE_00 (0xDE)
+#define MAC_BYTE_01 (0xAD)
+#define MAC_BYTE_02 (0xBE)
+#define MAC_BYTE_03 (0xEF)
+#define MAC_BYTE_04 (0xFE)
+#define MAC_BYTE_05 (0x00)     /* --- SN 3 */
+
+
+/*
+ *   Board IP's must be in Router adress space !!!
+ */
+#define IP_ADDRESS_BYTE_0 (192)
+#define IP_ADDRESS_BYTE_1 (168)
+#define IP_ADDRESS_BYTE_2 (34)      /* --- 3 */
+#define IP_ADDRESS_BYTE_3 (177)
+
+#define DNS_ADDRESS_BYTE_0 (192)
+#define DNS_ADDRESS_BYTE_1 (168)
+#define DNS_ADDRESS_BYTE_2 (34)     /* --- 3 */
+#define DNS_ADDRESS_BYTE_3 (1)
+
+/* 
+ * Defines the server IPv4 address
+ */
+#define SERVER_ADDRESS_DESTINATION "145.239.84.165"        /* -- used in production  -- */
+#define SERVER_ADDRESS_DESTINATION_PORT "35269"            /* -- used in production  -- */
+
+#define SERVER_ADDRESS_GET_URL_COMMAND_X      "/gsm/entry_new.php?x="        /* used in production */
+#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "/gsm/index.php"               /* used in production */
+
+
+/*
+ * SIM card details
+ */
+#define LOG_APP_IMEI_CARD  "220201750827"         /* 20 chars MAX - including NULL  */
+
+#define LOG_APP_SIM_SN "1111111111111111112"      /* 25 chars MAX - including NULL */
+#define LOG_APP_SIM_PHONE_NR "0726734732"         /* 10 chars MAX - NOT including NULL */
+#define LOG_APP_SIM_OPERATOR "ORANGE"                /* 15 chars MAX - including NULL */
+
+/* Location specific details  */
+#define LOG_APP_TOWN    "BUC_TEST_4"               /* 15 chars MAX - NOT including NULL */
+#define LOG_APP_PLACE   "TEST_4"                   /* 20 chars MAX - NOT including NULL */
+#define LOG_APP_DETAILS "UNDER_TEST_4"             /* 25 chars MAX - NOT including NULL */
+
+#define LOG_APP_DEVICE_TYPE "NV10"            /* 10  chars MAX - including NULL */
+#define LOG_APP_DEFAULT_RSSI "1"              /* 2   chars MAX - including NULL */
+
+#endif /* #if(BOARD_CONFIG_SLOT == 4) */
+
 
 
 
@@ -295,10 +367,10 @@
 //#define SERVER_ADDRESS_DESTINATION_PORT (7777)             /* -- used for tests with external connection  -- */
 
 #define SERVER_ADDRESS_DESTINATION "192.168.0.109"       /* -- used for local tests -- */
-#define SERVER_ADDRESS_DESTINATION_PORT (80)             /* -- used for local tests -- */
+#define SERVER_ADDRESS_DESTINATION_PORT "80"             /* -- used for local tests -- */
 
-#define SERVER_ADDRESS_GET_URL_COMMAND_X      "GET /entry_new.php?x="        /* used for local tests */
-#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "GET /index.php"               /* used in production */
+#define SERVER_ADDRESS_GET_URL_COMMAND_X      "/entry_new.php?x="        /* used for local tests */
+#define SERVER_ADDRESS_GET_URL_AVAILABILITY   "/index.php"               /* used in production */
 
 /*
  * SIM card details

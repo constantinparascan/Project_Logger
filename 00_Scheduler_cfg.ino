@@ -15,6 +15,7 @@
 #include "00_Scheduler_cfg.h"
 
 #include "99_Automat_Board_cfg.h"
+#include "99_Automat_Board_Config.h"
 
 /* include headers of drivers/applications */
 #include "05_Eth_Service_Client.h"
@@ -23,6 +24,7 @@
 #include "07_USART_Client.h"
 #include "09_EEPROM_Driver.h"
 #include "09_NvM_Manager.h"
+#include "09_NvM_Manager_cfg.h"
 #include "60_GSM_SIM900.h"
 
 #include "03_Com_Service.h"
@@ -43,29 +45,9 @@ extern unsigned char arrNvM_RAM_Mirror_Str_Device  [ ];
 
 unsigned char nNvM_Header[3] = {'N', 'v', 'M'};
 
-/* 0 = PARALLEL
- * 1 = CCTALK
- */
-unsigned char nHW_Config_TYPE = 0;
+/* Local variable keeping the current configuration read-out ... */
+unsigned char nHW_Config_TYPE_Local = 0;
 
-/* 0 = SIM GSM
- * 1 = Ethernet W5100
- */
-unsigned char nHW_Config_COMM_TYPE = 0;
-
-/*********************************************************************/
-/*
- *   HW configurations !
- *
- */
-void init_Detect_HW_Configuration(void)
-{
-  /*
-   * [ToDo] - read from HW pin ...
-   */
-  nHW_Config_TYPE = 0;
-  nHW_Config_COMM_TYPE = 0;
-}
 
 /*********************************************************************/
 /*
@@ -79,6 +61,13 @@ void init_Detect_HW_Configuration(void)
  */
 void init_cyclic_Task_1ms(void)
 {
+
+  /* 
+   * Detect current HW configuration 
+   */
+  Logger_App_DetectConfiguration();
+  nHW_Config_TYPE_Local = Board_Config_Get_HW_ConfigType();
+
 
   EEPROM_driver_init();  
 
@@ -100,43 +89,48 @@ void init_cyclic_Task_1ms(void)
   NvM_ReadAll();
 
 
+  /*
+   * ... special NvM blocks ... write default values
+   *     it's mandatory not to have empty/not written blocks here
+   */
+
   /* no NvM entry for the phone number ... */
-  if( ( NvM_Get_Block_Status(6) & 0x80 ) == 0x00 )
+  if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_6_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_SimNR, LOG_APP_SIM_PHONE_NR);
-    NvM_Write_Block(6);
+    NvM_Write_Block(NVM_BLOCK_CHAN_6_ID);
   }
 
 
   /* no NvM entry for the Town        ... */
-  if( ( NvM_Get_Block_Status(7) & 0x80 ) == 0x00 )
+  if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_7_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_Town, LOG_APP_TOWN);
-    NvM_Write_Block(7);
+    NvM_Write_Block(NVM_BLOCK_CHAN_7_ID);
   }
 
   /* no NvM entry for the Place       ... */
-  if( ( NvM_Get_Block_Status(8) & 0x80 ) == 0x00 )
+  if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_8_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_Place, LOG_APP_PLACE);
-    NvM_Write_Block(8);
+    NvM_Write_Block(NVM_BLOCK_CHAN_8_ID);
   }
 
   /* no NvM entry for the Details       ... */
-  if( ( NvM_Get_Block_Status(9) & 0x80 ) == 0x00 )
+  if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_9_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_Details, LOG_APP_DETAILS);
-    NvM_Write_Block(9);
+    NvM_Write_Block(NVM_BLOCK_CHAN_9_ID);
   }
 
   /* no NvM entry for the Device Type   ... */
-  if( ( NvM_Get_Block_Status(10) & 0x80 ) == 0x00 )
+  if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_10_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_Device, LOG_APP_DEVICE_TYPE);
-    NvM_Write_Block(10);
+    NvM_Write_Block(NVM_BLOCK_CHAN_10_ID);
   }
 
-}
+}/* init_cyclic_Task_1ms */
 
 
 /*
@@ -146,25 +140,32 @@ void init_cyclic_Task_5ms(void)
 {
   Com_Service_Init();
 
-  /* SIM900 driver init
+  /* 
+   * SIM900 driver init
    */
   AT_Command_Processor_Init();
 
 
+  /* 
+   *  - init Application depending on the HW configuration 
+   */
+  /* PARALLEL configuration ... */ 
+  if( nHW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
+  {  
+    Logger_App_Parallel_init();
+  }
+  else
+  {
+    /* CCTALK configuration ... */
+    if( nHW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
+    {
+      USART_Init();
 
-  // nNvM_RAM_Mirror_CH1 = 250;
-  // nNvM_RAM_Mirror_CH2 = 250;
-  // nNvM_RAM_Mirror_CH3 = 250;
-  // nNvM_RAM_Mirror_CH4 = 250;        
+      Logger_App_init();
+    }
+  }
 
-  // NvM_Write_Block(1);
-  // NvM_Write_Block(2);
-  // NvM_Write_Block(3);
-  // NvM_Write_Block(4);
 
-  
-
-  Logger_App_Parallel_init();
 }
 
 /*
@@ -215,7 +216,23 @@ void main_cyclic_Task_1ms(void)
    */
   //Logger_App_Parallel_main();
 
-  Logger_App_Parallel_main_v2();
+
+  /* 
+   * execute Main function depending on HW configuration 
+   */
+  if( nHW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
+  {
+    Logger_App_Parallel_main_v2();
+  }
+  else
+  {
+    if( nHW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
+    {
+      USART_main();
+
+      Logger_App_main_v2();
+    }
+  }  
 }
 
 /*
@@ -229,7 +246,6 @@ void main_cyclic_Task_5ms(void)
 
   /* SIM900 - driver !! - */
   AT_Command_Processor_Main();
-
 
 }
 

@@ -5,7 +5,7 @@
  * 0 - disable serial debugging
  * 1 - enable serial  debugging 
  */ 
-#define AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE (0)
+#define AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE (1)
 
 
 typedef enum T_GSM_SIM900_STATE_TAG

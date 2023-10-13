@@ -136,7 +136,7 @@ ISR(USART3_UDRE_vect)
 
 /* USART RX ISR
  * v0.1
- *    - if a new byte is received from USART ... then we move-it in the Rx buffer and w
+ *    - if a new byte is received from USART ... then we move-it in the Rx buffer and 
  *       update the "new data" flag !
  */
 volatile unsigned char nLocal_USART_Rx;
@@ -183,6 +183,7 @@ void AT_Command_Processor_Enable_Transmission(void);
 void AT_Send_Command_Expect_Response_InitSeq(unsigned char *strCmd, unsigned char *strResp);
 unsigned char AT_Check_Response_vs_Expected(void);
 unsigned char AT_Command_Decode_Rx_Buff(void);
+unsigned char AT_Command_Decode_Rx_Buff_v2(void);
 
 unsigned char ArrDebugEcho[255];
 void AT_Debug_Echo(void);
@@ -340,7 +341,7 @@ typedef struct Tag_AT_GSM_INIT_COMMAND_SET
 
 
 /*
- * after POWE OK sequence that worked:
+ * after POWER ON - OK sequence that worked:
  *
  *  AT             -> OK
  *  AT+CPIN=0000   -> OK    ----------> wait 10-15 sec !!!! for connection to occure
@@ -1541,6 +1542,7 @@ unsigned char AT_Command_Decode_Rx_Buff_v2(void)
           * copy command data to local buffer ... 
           */
           nIdx += 4;
+          nCopyIdx = 0;
           
           while( nIdx < nAT_Resp_Rx_Idx )
           {
