@@ -59,6 +59,12 @@ void Logger_App_main(void);
 unsigned short Logger_App_GetChannelValue(unsigned char nChannValue);
 unsigned char  Logger_App_Get_LastBillType(void);
 unsigned char  Logger_App_Get_LastErrorValue(void);
+char* Logger_App_GetPhoneNumberString(void);
+char* Logger_App_GetTownNameString(void);
+char* Logger_App_GetPlaceNameString(void);
+char* Logger_App_GetDetailsNameString(void);
+char* Logger_App_GetDeviceNameString(void);
+
 
 
 void Logger_App_Output_Pins_init(void);

@@ -201,11 +201,11 @@ void Logger_App_pre_init_NvM_link(void)
   NvM_AttachRamImage((unsigned char *)&nNvM_RAM_Mirror_CH4, 4);
   NvM_AttachRamImage((unsigned char *)&nNvM_RAM_Mirror_CH5, 5);
 
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_SimNR   [0],  6);
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Town    [0],  7);
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Place   [0],  8);
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Details [0],  9);
-  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Device  [0],  10);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_SimNR   [0],  NVM_BLOCK_CHAN_6_ID);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Town    [0],  NVM_BLOCK_CHAN_7_ID);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Place   [0],  NVM_BLOCK_CHAN_8_ID);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Details [0],  NVM_BLOCK_CHAN_9_ID);
+  NvM_AttachRamImage((unsigned char *)&arrNvM_RAM_Mirror_Str_Device  [0],  NVM_BLOCK_CHAN_10_ID);
 
 }
 
@@ -255,17 +255,26 @@ void Logger_App_Write_Default_Values_NvM(unsigned char nSlotWrite)
 void Logger_App_Callback_Command_Reset_Monetary(void)
 {
 
+  nCH1_old = 0;
+  nCH2_old = 0;
+  nCH3_old = 0;
+  nCH4_old = 0;
+  nCH5_old = 0;
+
+  /* reset also internal "sNV9plus" states ... */
+  tool_NV9plus_utils_ResetCashContent();
+
   nNvM_RAM_Mirror_CH1 = 0; 
-  NvM_Write_Block( 1 );
+  NvM_Write_Block( NVM_BLOCK_CHAN_1_ID );
 
   nNvM_RAM_Mirror_CH2 = 0;
-  NvM_Write_Block( 2 );
+  NvM_Write_Block( NVM_BLOCK_CHAN_2_ID );
 
   nNvM_RAM_Mirror_CH3 = 0;
-  NvM_Write_Block( 3 );
+  NvM_Write_Block( NVM_BLOCK_CHAN_3_ID );
 
   nNvM_RAM_Mirror_CH4 = 0;
-  NvM_Write_Block( 4 );
+  NvM_Write_Block( NVM_BLOCK_CHAN_4_ID);
 
   nCH1_old = 0;
   nCH2_old = 0;
@@ -313,7 +322,6 @@ unsigned short Logger_App_GetChannelValue(unsigned char nChannValue)
   return nReturn;
 }
 
-
 unsigned char Logger_App_Get_LastBillType(void)
 {
   return nLastBillType;
@@ -322,6 +330,31 @@ unsigned char Logger_App_Get_LastBillType(void)
 unsigned char Logger_App_Get_LastErrorValue(void)
 {
   return (unsigned char)sNV9plus.nBillValidator_err;
+}
+
+char* Logger_App_GetPhoneNumberString(void)
+{
+  return &arrNvM_RAM_Mirror_Str_SimNR[0];
+}
+
+char* Logger_App_GetTownNameString(void)
+{
+  return &arrNvM_RAM_Mirror_Str_Town[0];
+}
+
+char* Logger_App_GetPlaceNameString(void)
+{
+  return &arrNvM_RAM_Mirror_Str_Place[0];
+}
+
+char* Logger_App_GetDetailsNameString(void)
+{
+  return &arrNvM_RAM_Mirror_Str_Details[0];
+}
+
+char* Logger_App_GetDeviceNameString(void)
+{
+  return &arrNvM_RAM_Mirror_Str_Device[0];
 }
 
 
@@ -845,676 +878,6 @@ unsigned char Logger_App_Process_Buffer(void)
 
 }
 
-
-
-
-/* v0.1
- *
- *   !!! Main Logger state machine !!!
- *
- *  - function needs cyclic execution in order to process it's state machine
- */
-void Logger_App_main(void)
-{
-  unsigned char  nReceiveCountBytes = 0;
-  unsigned short nChanValTemp = 0;
-
-  #if(LOGGER_APP_DEBUG_SERIAL == 1)
-    Logger_App_Debug_Print_State();
-  #endif
-
-  switch(LoggerAppState)
-  {
-
-    /* 
-     * currently nothing to do ... in this state ... go to init 
-     */
-    case E_LOGGER_APP_UNININT:
-
-    /*
-     *
-     */
-    case E_LOGGER_APP_INIT:
-      LoggerAppState = E_LOGGER_APP_STARTUP_DELAY;
-
-      /* startup delay required for all other layers to complete initialization ... */
-      /*                  delay = 1ms * LOG_APP_STARTUP_DELAY                       */
-      nLoggerAppStartupDelay = LOG_APP_STARTUP_DELAY;
-
-    break;
-
-
-    /* Startup delay used to 
-     *   wait for all other initialization of internal devices
-     *   like ETH, that can take several reccurences ... 
-     */
-    case E_LOGGER_APP_STARTUP_DELAY:
-
-      /* if we need to continue in this waiting state ... */
-      if(nLoggerAppStartupDelay > 0)
-      {
-        nLoggerAppStartupDelay --;
-      }
-      /* or we can go on ... */
-      else
-      {
-
-        /*
-         * Send a startup message ...
-         */
-        //LoggerAppState = E_LOGGER_APP_WAIT_FOR_SERVER_SERVICE_ONLINE_SEND_REQ;
-        LoggerAppState = E_LOGGER_APP_PROCESS_MESSAGES;
-
-        /* 
-         * Internal variable initialization
-         */
-        
-        itterUSART_withoutRX = 0;
-        nLoggerMsgBuffIDX_Rx = 0;
-        nNew_Comm_Frame_Consumed = 0;
-
-        nFirstRxFrame_AfterReset = 1;
-      }
-
-    break;
-
-
-    /*
-     *  ToDo ----->>> split this HUGE STATE !!!!
-     *
-     */
-
-
-    /******************************************************/
-    /*     
-    /*               Main processing state
-    /*    
-    /******************************************************/ 
-    case E_LOGGER_APP_PROCESS_MESSAGES:
-
-      /* returns 0 if no USART bytes have been received since last call !
-       *   otherwise the user buffer index will also be updated ... indicating the last free position
-       */
-      nReceiveCountBytes = USART_Has_Received_Data();
-
-      /************************************/
-      /*      frame identification and    */
-      /*      separation                  */
-      /*                                  */
-      /************************************/
-      
-      /* 
-       * If we have something in the Rx buffer ... then prepare to detect a frame gap
-       */      
-      if(nReceiveCountBytes > 0)
-      {
- 
-        #if(LOGGER_APP_DEBUG_SERIAL == 1)
-          //Serial.println(" - Data received - ");
-        #endif
-        
-        /* new data received .... reset frame delay indicator ... */
-        itterUSART_withoutRX = 0;
-
-
-        /*
-         * indicates that there is no new frame that can be 
-         *   processed by the user
-         *
-         */
-        nNew_Comm_Frame_Consumed = 0;
-
-        /* !!!! OPTIMIZATION !!!! */
-        /*   we should look more often if the transmission is over and the Eth driver is ready ....      */
-        /*   but due to CPU load ... we only check here ! */
-        /*   this should suffice ... since we don't transmit anything if there is no USART communication */
-        /*                                                                                               */
-        nTransmissionToServer_IsPreparedForNewTransmission = Com_Service_Client_Is_Comm_Free(); //Eth_Service_Client_IsReadyForNewCommand();
-      }
-      else
-      /************************************************************
-       *
-       *   ALL processing is done during communication gaps !
-       *
-       ************************************************************/
-      {
-        /* increment silence counter */
-        if(itterUSART_withoutRX < _MAX_INTER_FRAME_TIME_)
-        {
-          /* a new itteration has ended without any Rx communication on the bus ... */
-          itterUSART_withoutRX ++;
-        }      
-        /*
-         *
-         * Communication GAP detected !!! 
-         *
-         */
-        else
-        {
-          /* an inter frame delay has been detected and the frame has not been consumed ... */
-          if(nNew_Comm_Frame_Consumed == 0)
-          {
-
-            /* 
-             *  look in the USART buffer for the full frame !
-             */
-            (void)USART_Receive_Bytes(arrLoggerReceiveBytes, &nLoggerMsgBuffIDX_Rx, _MAX_RX_COMM_BUFFER_SIZE_);
-
-
-            #if(LOGGER_APP_DEBUG_SERIAL == 2)
-              unsigned char idx;            
-              for(idx = 0; idx < nLoggerMsgBuffIDX_Rx; idx ++)
-              {
-                Serial.print(arrLoggerReceiveBytes[idx], HEX);
-                Serial.print(" ");
-              }
-              Serial.write(arrLoggerReceiveBytes, nLoggerMsgBuffIDX_Rx);
-              Serial.println();
-            #endif
-
-
-            /* 
-             * Try to identify frame and extract data if valid ... 
-             */
-            if( Logger_App_Process_Buffer() > 0 )
-            {
-
-              /* 
-               *   [ToDo] !!!! ............ if server is in progress we don't decode frame !!!! ... we could not send-it anyway ... try next time ??? 
-               *
-               *            ... maybe we should stack the request for later processing !!! 
-               */
-
-                #if(LOGGER_APP_DEBUG_SERIAL == 1)
-                  snprintf(Logger_DebugPrintBuff, 50, "Log CH1=%d, CH1_O=%d, CH2=%d, CH2_O=%d, CH3=%d, CH3_O=%d, CH4=%d, CH4_O=%d, ERR=%d, ERR_O=%d", sNV9plus.nCH1_bill, nCH1_old, sNV9plus.nCH2_bill, nCH2_old, sNV9plus.nCH3_bill, nCH3_old, sNV9plus.nCH4_bill, nCH4_old, sNV9plus.nBillValidator_err, eMachineError_old);
-                  Serial.println(Logger_DebugPrintBuff);
-                #endif
-
-
-              /* !!! extract channel values !!! 
-               *
-               *    --- we have a CHANGE in the CHANNEL BILL content ??? 
-               */
-              if( ( (nCH1_old < sNV9plus.nCH1_bill) || (nCH2_old < sNV9plus.nCH2_bill) || (nCH3_old < sNV9plus.nCH3_bill) || (nCH4_old < sNV9plus.nCH4_bill) || \
-                    (eMachineError_old != sNV9plus.nBillValidator_err) )/* &&(nTransmissionToServer_IsPreparedForNewTransmission == 1) */ )
-              {
-
-
-                nLastBillType = 0;
-
-                /*
-                 *
-                 * Check to see if there is a new bill accepted !
-                 *
-                 */
-                if(nCH1_old != sNV9plus.nCH1_bill)
-                {
-                  nLastBillType = 1;
-                  nNvM_RAM_Mirror_CH1 = sNV9plus.nCH1_bill;
-
-                  /* updates must be stored in NvM also ... */
-                  NvM_Write_Block(1);
-                }
-                else
-                {
-                  if(nCH2_old != sNV9plus.nCH2_bill)
-                  {
-                    nLastBillType = 2;
-                    nNvM_RAM_Mirror_CH2 = sNV9plus.nCH2_bill;
-
-                    /* updates must be stored in NvM also ... */                    
-                    NvM_Write_Block(2);
-   
-
-                  }
-                  else
-                  {
-                    if(nCH3_old != sNV9plus.nCH3_bill)
-                    {
-                      nLastBillType = 3;
-                      nNvM_RAM_Mirror_CH3 = sNV9plus.nCH3_bill;
-
-                      /* updates must be stored in NvM also ... */                      
-                      NvM_Write_Block(3);
-                    }
-                    else
-                    {
-                      nLastBillType = 4;
-                      nNvM_RAM_Mirror_CH4 = sNV9plus.nCH4_bill;
-
-                      /* updates must be stored in NvM also ... */
-                      NvM_Write_Block(4);
-                    }
-                  }
-                }
-
-
-                /* *******************  */
-                /*                      */
-                /*   we have new data   */
-                /*  ... must inform     */
-                /*    server            */
-                /*                      */
-                /* *******************  */
-
-                /* Has been an error detected ? */
-                if(sNV9plus.eNV9State > NV9_STATE_RUN_NO_ERROR)
-                {
-
-                  #if(LOGGER_APP_DEBUG_SERIAL == 1)
-                    Serial.println("---------- ERROR ------------");
-                  #endif
-
-                  LoggerAppState = E_LOGGER_APP_ETH_INFORM_SERVER_ERROR_STATE;
-                  
-                }
-                else
-                /* inform server about a new bill reception ... */
-                {
-
-                  #if(LOGGER_APP_DEBUG_SERIAL == 1)
-                    Serial.println("---------- DATA BILLS ------------");
-                  #endif
-
-                  LoggerAppState = E_LOGGER_APP_ETH_INFORM_SERVER;
-                }
-
-                nCH1_old = sNV9plus.nCH1_bill;
-                nCH2_old = sNV9plus.nCH2_bill;
-                nCH3_old = sNV9plus.nCH3_bill;
-                nCH4_old = sNV9plus.nCH4_bill;
-                nCH5_old = sNV9plus.nCH5_bill;
-
-                eMachineError_old = sNV9plus.nBillValidator_err;
-                eMachineState_old = sNV9plus.eNV9State;
-
-                nTransmissionToServer_IsPreparedForNewTransmission = 0;
-
-              } /* end if (nCH1_old < sNV9plus.nCH1_bill) || (nCH2_old < sNV9plus.nCH2_bill) ||  ....*/
-
-            }/* end if(Logger_App_Process_Buffer() > 0) */
-
-
-            nLoggerMsgBuffIDX_Rx = 0;
-
-            /* indicates that the last received frame has been processed already !  ... and we must wait for a new frame communication */
-            nNew_Comm_Frame_Consumed = 1;
-          }
-
-        }
-
-
-        /*
-         *  Process FLAGS !!!
-         *
-         * .... if no startup message has been transmitted due to missing communication link ... mark-it for transmission now ...
-         *
-         */
-
-        /*
-         *    ------------- [ToDo] ---------------- this can be splitted into new states 
-         *                                          depending on the new COMM LAYER !!!!
-         *
-         */
-
-
-        /*
-         *
-         * We have not changed state ... in the previous logic
-         *       - that means we don't have to send an bill channel content frame
-         *
-         *       - the frame was a repeted communication frame !!!
-         *
-         */
-         
-
-
-          /*
-           *  [ToDo] --- here we must check if there is an response / command from server
-           *   
-           *        ----> jump to execution of command state !!!! 
-           *
-           */
-
-
-        if( LoggerAppState == E_LOGGER_APP_PROCESS_MESSAGES ) 
-        {
-
-          /* should we wait for previous request ... server response ? */
-          /*
-           * Possible use cases :
-           *       - we have previously sent a normal frame ... and now we wait server response for possible command processing ...
-           *       - we have sent previously an PING ...
-           *       - we have sent previously an ERROR frame ...
-           */
-
-          if( nFlagWaitResponseAfterRequest == 0x5A ) 
-          {
-            /* we have received all possible message buffers from server ... 
-             *   ... now go and process server response for possible commands ...
-             */
-            if( Eth_Service_Client_IsReadyForNewCommand() )
-            {
-              nFlagWaitResponseAfterRequest = 0;
-
-              LoggerAppState = E_LOGGER_APP_ETH_PROCESS_SERVER_RESPONSE;
-            }
-          }
-
-        }
-
-
-
-
-        /*
-         * ... !!! [ToDo ] !!!   ....
-         *   ... STACK previous commands if not responded !!!! 
-         *   ... loosing the possibility to respond to a certain command means blocking the server currently !!! 
-         *   ... we can loose a command if we are requested to send a monetary update AND we started to process the server request
-         *       that will override previous command !!!
-         */
-        if(LoggerAppState == E_LOGGER_APP_PROCESS_MESSAGES)
-        {
-
-          /* The command received from server is to reset the monetary !
-           */
-          if(nServerCommandCode == 'B')
-          {
-            // [ToDo]  ---> move this to a separate function  !!!!
-
-            nCH1_old = 0;
-            sNV9plus.nCH1_bill = 0;
-            nCH2_old = 0;
-            sNV9plus.nCH2_bill = 0;
-            nCH3_old = 0;
-            sNV9plus.nCH3_bill = 0;
-            nCH4_old = 0;
-            sNV9plus.nCH4_bill = 0;
-            nCH5_old = 0;
-            sNV9plus.nCH5_bill = 0;
-
-            nNvM_RAM_Mirror_CH1 = 0;
-            nNvM_RAM_Mirror_CH2 = 0;
-            nNvM_RAM_Mirror_CH3 = 0;
-            nNvM_RAM_Mirror_CH4 = 0;
-
-
-            NvM_Write_Block(1);
-            NvM_Write_Block(2);
-            NvM_Write_Block(3);
-            NvM_Write_Block(4);
-
-            /* consume command ! */
-            nServerCommandCode = 0;
-
-            LoggerAppState = E_LOGGER_APP_ETH_SEND_COMMAND_RESET_BILL_ACK_RESPONSE;
-
-          }/* end actions if received command is 'B' --> reset monetary ! */
-
-
-        }/* if still in the state (LoggerAppState == E_LOGGER_APP_PROCESS_MESSAGES) */
-
-      }/* end else if(nReceiveCountBytes > 0) */
-
-    break;
-
-
-    /*
-     *  in case of parallel mode !!
-     */    
-    case E_LOGGER_APP_PROCESS_PARALLEL_MESSAGES:
-    {
-      if( Logger_App_Parallel_HasNewEvents() > 0 )
-      {
-        
-        nLastBillType = 0;
-
-        /*
-         *
-         * Check to see if there is a new bill accepted !
-         *
-         */
-        nChanValTemp = Logger_App_Parallel_GetChannelValue(0);
-        if(nCH1_old !=  nChanValTemp )
-        {
-          nLastBillType = 1;
-          nNvM_RAM_Mirror_CH1 = nChanValTemp;
-
-          /* updates must be stored in NvM also ... */
-          NvM_Write_Block(1);
-        }
-        else
-        {
-          nChanValTemp = Logger_App_Parallel_GetChannelValue(1);
-          if(nCH2_old != nChanValTemp)
-          {
-            nLastBillType = 2;
-            nNvM_RAM_Mirror_CH2 = nChanValTemp;
-
-            /* updates must be stored in NvM also ... */                    
-            NvM_Write_Block(2);
-   
-
-          }
-          else
-          {
-            nChanValTemp = Logger_App_Parallel_GetChannelValue(2);
-            if(nCH3_old != nChanValTemp)
-            {
-              nLastBillType = 3;
-              nNvM_RAM_Mirror_CH3 = sNV9plus.nCH3_bill;
-
-              /* updates must be stored in NvM also ... */                      
-              NvM_Write_Block(3);
-            }
-            else
-            {
-              nChanValTemp = Logger_App_Parallel_GetChannelValue(3);
-              nLastBillType = 4;
-              
-              nNvM_RAM_Mirror_CH4 = nChanValTemp;
-
-              /* updates must be stored in NvM also ... */
-              NvM_Write_Block(4);
-            }
-          }
-        }
-
-
-        /* *******************  */
-        /*                      */
-        /*   we have new data   */
-        /*  ... must inform     */
-        /*    server            */
-        /*                      */
-        /* *******************  */
-
-        /* Has been an error detected ? */
-        // if(sNV9plus.eNV9State > NV9_STATE_RUN_NO_ERROR)
-        // {
-
-        //   #if(LOGGER_APP_DEBUG_SERIAL == 1)
-        //     Serial.println("---------- ERROR ------------");
-        //   #endif
-
-        //   LoggerAppState = E_LOGGER_APP_ETH_INFORM_SERVER_ERROR_STATE;
-                  
-        // }
-//                else
-                /* inform server about a new bill reception ... */
-        {
-
-          #if(LOGGER_APP_DEBUG_SERIAL == 1)
-          Serial.println("---------- DATA BILLS ------------");
-          #endif
-
-          LoggerAppState = E_LOGGER_APP_ETH_INFORM_SERVER;
-        }
-
-        nCH1_old = Logger_App_Parallel_GetChannelValue(0);
-        nCH2_old = Logger_App_Parallel_GetChannelValue(1);
-        nCH3_old = Logger_App_Parallel_GetChannelValue(2);
-        nCH4_old = Logger_App_Parallel_GetChannelValue(3);
-        //nCH5_old = Logger_App_Parallel_GetChannelValue(4);
-
-//        eMachineError_old = sNV9plus.nBillValidator_err;
-//        eMachineState_old = sNV9plus.eNV9State;
-
-        nTransmissionToServer_IsPreparedForNewTransmission = 0;
-
-
-      }
-
-      break;
-    }    
-
-
-
-    /********************************************** 
-     *  
-     *       Send: - BILL content to Server
-     *  
-     **********************************************/
-    case E_LOGGER_APP_ETH_INFORM_SERVER:
-
-          
-      //Logger_App_Build_Server_Req_Bill_Payment_Generic(0, 0); <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
-      Com_Service_Client_Request_BillPayment_Generic_Transmission(0);
-
-
-     /*
-      * The message transmission to server takes some time ...
-      * ... also the reception of the server response 
-      */
-      nFlagWaitResponseAfterRequest = 0x5A;
-
-
-      #if(LOGGER_APP_DEBUG_SERIAL == 1)
-        Serial.print(" C1:");
-        Serial.print(nCH1_old);
-        Serial.print(" C2:");
-        Serial.print(nCH2_old);
-        Serial.print(" C3:");
-        Serial.print(nCH3_old);
-        Serial.print(" C4:");
-        Serial.print(nCH4_old);
-        Serial.println();
-        Serial.println("-----------------------");        
-      #endif
-      
-
-      /* main processing state ... */
-      LoggerAppState = E_LOGGER_APP_PROCESS_MESSAGES;
-
-    break;
-
-
-    /**********************************************
-     *
-     *   Send RESET-BILL counter ACK frame to Server
-     *
-     **********************************************/
-    case E_LOGGER_APP_ETH_INFORM_SERVER_ERROR_STATE:
-
-      nTransmissionToServer_IsPreparedForNewTransmission = Eth_Service_Client_IsReadyForNewCommand();
-
-      /* if there is no error related to Eth driver ... */
-      if(nTransmissionToServer_IsPreparedForNewTransmission != 0xFF)
-      {
-
-        Logger_App_Build_Server_Req_Bill_Payment_Generic('E', (unsigned char)sNV9plus.nBillValidator_err);
-
-        /*
-         * The message transmission to server takes some time ...
-         * ... also the reception of the server response 
-         */
-        nFlagWaitResponseAfterRequest = 0x5A;
-      }        
-
-
-      /* Reset PING itteration cycle since a message has just been transmitted ... or in course of transmission
-       */       
-//      nPingToServerDelay = LOG_APP_PING_TO_SERVER_DELAY;
-
-      /* main processing state ... */
-      LoggerAppState = E_LOGGER_APP_PROCESS_MESSAGES;
-
-    break;
-
-
-
-    /* *******************************************
-     *
-     *   Process last server response for possible
-     *         commands and return to message processing ...
-     *     
-     * *******************************************/
-    case E_LOGGER_APP_ETH_PROCESS_SERVER_RESPONSE:
-
-      nTransmissionToServer_IsPreparedForNewTransmission = Eth_Service_Client_IsReadyForNewCommand();
-
-      /* if there is no error related to Eth driver ... */
-      if( nTransmissionToServer_IsPreparedForNewTransmission != 0xFF )
-      {
-        /* Possible commands:
-        *    - B - reset monetary
-        *
-        *    - A - alive
-        */
-        // (void)Logger_App_process_Server_commands();   ---> not needed anymore ... in Com !!!
-      }
-
-      /* main processing state ... */
-      LoggerAppState = E_LOGGER_APP_PROCESS_MESSAGES;
-  
-    break;    
-
-
-
-    /**********************************************
-     *
-     *   Send RESET-BILL counter ACK frame to Server
-     *
-     **********************************************/
-    case E_LOGGER_APP_ETH_SEND_COMMAND_RESET_BILL_ACK_RESPONSE:
-
-      nTransmissionToServer_IsPreparedForNewTransmission = Eth_Service_Client_IsReadyForNewCommand();
-
-      /* if Eth driver is in error state ... */
-      if( nTransmissionToServer_IsPreparedForNewTransmission != 0xFF )
-      {
-        (void)Logger_App_Build_Server_Reset_Bill_Value_Response();
-      }
-
-
-      // [ToDo] ----- check if we should wait for a new server command  !!!!!! we may loose commands if not !!! 
-      /*
-       * The message transmission to server takes some time ...
-       * ... also the reception of the server response 
-       */
-      // nFlagWaitResponseAfterRequest = 0x5A;  <--------------------------------------------------------------------
-
-
-      /* reset ping delay ... */
-//      nPingToServerDelay = LOG_APP_PING_TO_SERVER_DELAY;
-
-
-      /* main processing state ... */
-      LoggerAppState = E_LOGGER_APP_PROCESS_MESSAGES;
-
-    break;
-
-
-
-    default: 
-      LoggerAppState = E_LOGGER_APP_INIT;
-    break;
-
-  }/* end switch LoggerAppState */
-
-
-}/* void Logger_App_main(void) */
 
 
 /* v0.2

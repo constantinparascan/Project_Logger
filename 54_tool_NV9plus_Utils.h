@@ -64,6 +64,7 @@ typedef struct _TAG_NV9plus_internals
 void tool_NV9plus_utils_init(void);
 int  tool_NV9plus_utils_decode_status(unsigned char *arrDataBytes, unsigned char nLen, unsigned char nFirstRxFrame_State );
 int  tool_NV9plus_utils_GetChannelContent(unsigned char nChan, unsigned int* nChanBillVal, T_NV9plus_Error* eValidatorErr);
+void tool_NV9plus_utils_ResetCashContent(void);
 
 
 #endif /*__TOOL_NV9PLUS_UTILS_H__*/

@@ -13,7 +13,7 @@
 #define USART_RX_AT_BUFFER_LENGTH (500)
 #define USART_TX_AT_BUFFER_LENGTH (500)
 
-#define MAX_AT_SIM_COMM_SILENCE_TIMER_DELAY (200) /* 200 ms */
+#define MAX_AT_SIM_COMM_SILENCE_TIMER_DELAY (100) /* 5ms * 100 = 500ms */
 
 /*************************************************/
 /*
@@ -373,7 +373,10 @@ const T_AT_GsmInitCmdSet arrAT_GsmInitCmdSet[ MAX_INIT_SEQUENCE_LENGTH ] = \
 // wait until connected to an opperator ....
 // +COPS: 0 OK --> no connection
 // +COPS: 0,0,"orange"
-  {"AT+COPS?\r", "orange", "", "", 5000, NO_SKIP_NEXT_CMD, 1000}, \
+//--> new modules SIM900  --> +COPS:0,0,"ora"
+//  {"AT+COPS?\r", "orange", "", "", 5000, NO_SKIP_NEXT_CMD, 1000}, \
+
+  {"AT+COPS?\r", "ora", "", "", 5000, NO_SKIP_NEXT_CMD, 1000}, \
 
 	{"AT+CGATT?\r", "+CGATT: 1","", 1000, SKIP_NEXT_CMD_IF_TRUE, 1000},  \
 	{"AT+CGATT=1\r", "OK", "", "", 1000, NO_SKIP_NEXT_CMD, 1000},  \ 
@@ -424,8 +427,8 @@ unsigned char nAT_Command_Step1_Sequence_Idx;
 T_AT_GsmInitCmdSet arrAT_Gsm_COMAND_Step1 [ MAX_COMMAND_STEP_1 ] = 
 {
   {"", "OK", "", "", 100, NO_SKIP_NEXT_CMD, 100},
-  {"AT+HTTPACTION=0\r", "OK", "", "", 1000, NO_SKIP_NEXT_CMD, 100},
-  {"AT+HTTPREAD\r", "!DOCTYPE", "", "", 200, NO_SKIP_NEXT_CMD, 100}     /* <<<<<<<<<<<<< robustness actions required !!!!    [TODO !!!!] */
+  {"AT+HTTPACTION=0\r", "OK", "", "", 100, NO_SKIP_NEXT_CMD, 100},
+  {"AT+HTTPREAD\r", "****", "", "", 200, NO_SKIP_NEXT_CMD, 100}     /* <<<<<<<<<<<<< robustness actions required !!!!    [TODO !!!!] */
                                                                         /*
                                                                          *   >>>>> search for CMD or *** !!!! or nothing to search !!!! no !DOCTYPE is returned
                                                                          */  
@@ -749,7 +752,7 @@ void AT_Command_Processor_Main(void)
         else
         {
 
-          /*
+         /*
           * response waiting timeout has been finished ... most likely no response has been received OR an 
           *     an response != OK or ERROR !!!
           */
@@ -1099,7 +1102,7 @@ void AT_Command_Processor_Main(void)
       /* load maximum time that we can wait for a transmission to be done to SIMxxx board      ... otherwise ERROR ... */
       nAT_Command_Transmission_Wait_Counter = AT_MAX_DELAY_WAIT_TRANSMISSION;
 
-      /* Reset counters and flags ... prepare for transmission ...
+      /* Reset counters and flags ... prepare for transmission ... in the reception buffer we shall have ECHO !!!
        */      
       AT_Command_Processor_Reset_Reception();
 
@@ -1288,7 +1291,7 @@ void AT_Command_Processor_Main(void)
         }
         else
         {
-          if( strstr(arr_AT_Resp_BuffRx, "OK" ) || strstr( arr_AT_Resp_BuffRx, arrAT_Gsm_COMAND_Step1[ nAT_Command_Step1_Sequence_Idx ].str_Exp_Rx_Resp_OK) )
+          if( /*strstr(arr_AT_Resp_BuffRx, "OK" ) || */strstr( arr_AT_Resp_BuffRx, arrAT_Gsm_COMAND_Step1[ nAT_Command_Step1_Sequence_Idx ].str_Exp_Rx_Resp_OK) )
           {
 
             nAT_Delay_AfterCommand = arrAT_Gsm_COMAND_Step1[ nAT_Command_Step1_Sequence_Idx ].nDelayAfterCommand;
@@ -1306,6 +1309,10 @@ void AT_Command_Processor_Main(void)
              *
              *
              */
+
+            nAT_Delay_AfterCommand = arrAT_Gsm_COMAND_Step1[ nAT_Command_Step1_Sequence_Idx ].nDelayAfterCommand; 
+
+            eAT_Processor_State = AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_WAIT_CORRECT_RESPONSE_FROM_COMMAND;
           }
 
         }/* else if( strstr(arr_AT_Resp_BuffRx, "ERROR") )  */
@@ -1324,6 +1331,43 @@ void AT_Command_Processor_Main(void)
 			break;
 
     }/* AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ_PROCESS_RESPONSE */
+
+
+    case AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_WAIT_CORRECT_RESPONSE_FROM_COMMAND:
+    {
+      if( nAT_Delay_AfterCommand > 0 )
+      {
+        nAT_Delay_AfterCommand --;
+
+
+        /* check the possibility for the correct response reception ... */
+        if( strstr( arr_AT_Resp_BuffRx, arrAT_Gsm_COMAND_Step1[ nAT_Command_Step1_Sequence_Idx ].str_Exp_Rx_Resp_OK) )
+        {
+            nAT_Command_Step1_Sequence_Idx ++;
+
+            eAT_Processor_State = AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_DELAY_AFTER_COMMAND;
+
+          #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
+            Serial.println();
+            Serial.print("[I] Step1 Received Lastly: ");
+            Serial.println((const char *)arr_AT_Resp_BuffRx);
+          #endif
+
+        }
+
+      }
+      else
+      {
+          /* not the expected response .... */
+
+ 	  			if(nAT_ERROR_Limit_Retry_Counter > 0)
+		  		{
+			  		nAT_ERROR_Limit_Retry_Counter --;
+          }
+
+          eAT_Processor_State = AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_DELAY_AFTER_COMMAND;
+      }
+    }
 
 
     case AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_DELAY_AFTER_COMMAND:
@@ -1567,6 +1611,11 @@ unsigned char AT_Command_Decode_Rx_Buff_v2(void)
           nLastServerResponse_Data_Len = nCopyIdx;
 
         }/* if(arr_AT_Resp_BuffRx[nIdx + 3] > 'A') */
+        else
+        {
+          arrLastServerResponse_Data[0] = 0;
+          nLastServerResponse_Data_Len = 0;
+        }
 
       }/*  if( ( arr_AT_Resp_BuffRx[nIdx] == 'C' ) && ( arr_AT_Resp_BuffRx[nIdx + 1] == 'M' ) && ( arr_AT_Resp_BuffRx[nIdx + 2] == 'D' ) ) */
 

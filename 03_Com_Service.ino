@@ -1,3 +1,38 @@
+/* C.Parascan 
+ * V0.1 - 05.06.2023 - first version
+ * V0.2 - 17.10.2023 - minor adaptations and bug-fixing
+ *
+ *
+ * - Com is an intermediate layer interposing between communication drivers ( SIM900 - GPRS / Ethernet W5100 )
+ * - It's main porpuse is to handle "fire and forget" requests from application (above) layer so the design of applications can be simplified
+ * - This layer is checking if the connection with server is established and only after is accepting requests from application
+ *
+ * - Frame format is standardized and does NOT change depending on communication type - is bound by the server application
+ * - A frame example that is transmitted TO server: 
+ *              http://145.239.84.165:35269/gsm/entry_new.php?x=220131329877;1111111111111111111;0726734732;RDS;256;256;256;256;A;0;0;No_approver;BUC_TEST_3;TEST_3;UNDER_TEST_3;NV10;1
+ *                                                                  \IMEI            \SIM SN        \ SIM NR  \  \   \   \   \   \
+ *                                                                                                             \  CH1 ...  CH4    Frame type 
+ *                                                                                                            SIM           \
+ *                                                                                                            opperator      \ This is where the money are kept
+ *                                                                                                                              CH1 * 1 RON value
+ *                                                                                                                              CH2 * 5 RON value
+ *                                                                                                                              CH3 * 10 RON value
+ *                                                                                                                              CH4 * 50 RON value
+ *                                                                                                                              
+ * - Server does respond with a string char (max 63 chars) which looks like: 
+ *                 CMDAServer is alive***********************************************    "A" -> Alive
+ *                 CMDTDEBUG_CITY****************************************************    "T" -> request to update Town name to "DEBUG_CITY"
+ *                 CMDPDEBUG_LOCATION************************************************    "P" -> request to update Location name to "DEBUG_LOCATION"
+ *                 CMDDDEBUG_DETAILS*************************************************    "D" -> request to update Details name to "DEBUG_DETAILS"
+ *                 CMDN1234567890****************************************************    "N" -> request to update SIM NR name to "1234567890"
+ *                 CMDVNV10**********************************************************    "V" -> request to update Validator name to "NV10" 
+ *                 CMDB**************************************************************    "B" -> reset monetary --> CH1 = 0, CH2 = 0, CH3 = 0, CH4 = 0
+ *
+ *
+ * - Communication between application layer and current COM layer is done via "callback" functions specified below. They act on "nCallbackFlags" 
+ *            handeled by the main function that are performing various communication actions.
+ */
+
 #include "03_Com_Service.h"
 #include "03_Com_Service_cfg.h"
 #include "99_Automat_Board_cfg.h"
@@ -112,11 +147,10 @@ void AT_Command_Callback_Request_ERROR_Status_Transmission(void)
 }
 
 
-/*  *****************************************
+/* V0.1
  *
  *    Initialize the Communication Service ...
  *
- *  *****************************************
  */
 void Com_Service_Init(void)
 {
@@ -148,6 +182,10 @@ void Com_Service_Init(void)
    */
    nCom_HW_Config_TYPE_Local = Board_Config_Get_HW_ConfigType();
 
+   /*  ensure no flags requests are set ... 
+    */
+   nCallbackFlags = 0x00;
+
 }/* end function Com_Service_Init */
 
 
@@ -157,6 +195,7 @@ void Com_Service_Init(void)
  */
 void Com_Service_main(void)
 {
+  /* temporary keep retrieved values for further processing ...  */
   unsigned short nTempCh1 = 0;
   unsigned short nTempCh2 = 0;
   unsigned short nTempCh3 = 0;
@@ -172,7 +211,7 @@ void Com_Service_main(void)
     case COM_SERVICE_STATE_STARTUP:
     {
       /*
-       * [ToDo] ... initialize time-outs ... errors ... 
+       *  ... initialize time-outs ... errors ... 
        */
 
        eComServiceState = COM_SERVICE_STATE_QUERY_SERVER;
@@ -196,13 +235,14 @@ void Com_Service_main(void)
       {
 
         /*
-         * [ToDo] Send Startup command ... and advance state ...
+         * Prepare to send Startup command ... and advance state ...
          */
 
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
           Serial.println("[I] State: COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP ...");
         #endif
 
+        /* reset init state flag ... */
         nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_INIT_FINISH;
 
         eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP;
@@ -214,7 +254,10 @@ void Com_Service_main(void)
      * make sure "START" frame is transmitted ... 
      */
     case COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP:
-      
+
+      /* 
+       * Collect current status of channel (monetary) values ... and send them into a "Start" frame.
+       */      
       if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
       {
         nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
@@ -232,9 +275,8 @@ void Com_Service_main(void)
         }        
 
       nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'S', 0 );
-      //nStatus = 1; // for debug ...
       
-      /* go to next state only if there has been a successful start command ... */
+      /* go to next state only if there has been a successful start command accepted by the lower layers ... */
       if( nStatus > 0 )
       {
         eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT;
@@ -253,7 +295,7 @@ void Com_Service_main(void)
     case COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT:
 
       /* 
-       * Full com only after SIM900 driver has reached stable state ...
+       * Got to "Full Com" state only after SIM900 driver has reached iddle state ...
        */
       if( AT_Command_Processor_Is_Iddle() > 0 )
       {      
@@ -276,7 +318,7 @@ void Com_Service_main(void)
      *
      *
      */
-
+     
 
     case COM_SERVICE_STATE_FULL_COM:
     {
@@ -314,6 +356,7 @@ void Com_Service_main(void)
         nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'P', 0 );
         //nStatus = 1;  // for debug porpuses ...
       
+        /* if the COM layer has successfully passed the request downstream to AT layer ... then we erase the request bit, otherwise try again next time ... */      
         if( nStatus > 0 )
         {
           /*
@@ -332,11 +375,11 @@ void Com_Service_main(void)
       }/* End PING !!  */
 
 
-      /* 
+      /* *********************************
        *
        * SEND a normal frame ... 
        *
-       */
+       * ********************************* */
       if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL )       
       {
 
@@ -359,8 +402,8 @@ void Com_Service_main(void)
           }
 
         nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v2(nTempCh1, nTempCh2, nTempCh3, nTempCh4, nLastBillTemp );
-        //nStatus = 1;
-      
+
+        /* if the COM layer has successfully passed the request downstream to AT layer ... then we erase the request bit, otherwise try again next time ... */      
         if( nStatus > 0 )
         {
 
@@ -376,11 +419,11 @@ void Com_Service_main(void)
 
 
 
-      /* 
+      /* ****************************
        *
        * SEND an ERROR frame ... 
        *
-       */
+       * **************************** */
       if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME )       
       {
 
@@ -439,7 +482,6 @@ void Com_Service_main(void)
       {
         nCommandFromServer = AT_Command_Read_Last_Command_From_Server();
 
-
         /* RESET Monetary command ? */
         if( nCommandFromServer == 'B' )
         {
@@ -467,9 +509,33 @@ void Com_Service_main(void)
         else
           if(nCommandFromServer == 'N')
           {
-            //strcpy( arrNvM_RAM_Mirror_Str_SimNR, AT_Command_Get_Data_From_Last_Command_From_Server() );
-            //NvM_Write_Block(NVM_BLOCK_CHAN_6_ID);
+            strcpy( Logger_App_GetPhoneNumberString(), AT_Command_Get_Data_From_Last_Command_From_Server() );
+            NvM_Write_Block(NVM_BLOCK_CHAN_6_ID);
           }
+          else
+            if(nCommandFromServer == 'T')
+            {
+              strcpy( Logger_App_GetTownNameString(), AT_Command_Get_Data_From_Last_Command_From_Server() );
+              NvM_Write_Block(NVM_BLOCK_CHAN_7_ID);
+            }
+            else
+              if(nCommandFromServer == 'P')
+              {
+                strcpy( Logger_App_GetPlaceNameString(), AT_Command_Get_Data_From_Last_Command_From_Server() );
+                NvM_Write_Block(NVM_BLOCK_CHAN_8_ID);
+              }
+              else
+                if(nCommandFromServer == 'D')
+                {
+                  strcpy( Logger_App_GetDetailsNameString(), AT_Command_Get_Data_From_Last_Command_From_Server() );
+                  NvM_Write_Block(NVM_BLOCK_CHAN_9_ID);
+                }
+                else
+                  if(nCommandFromServer == 'V')
+                  {
+                    strcpy( Logger_App_GetDeviceNameString(), AT_Command_Get_Data_From_Last_Command_From_Server() );
+                    NvM_Write_Block(NVM_BLOCK_CHAN_10_ID);
+                  }
 
 
         nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'A', 0 );

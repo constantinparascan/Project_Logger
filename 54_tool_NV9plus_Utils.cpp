@@ -449,9 +449,6 @@ void tool_NV9plus_utils_ResetCashContent(void)
  
     sNV9plus.nBillValidator_err  = E_UNKNOWN;
 
-    /* no events ... */    
-    sNV9plus.nEvCnt = 0;
-
     /* reset validator internal resets ... */
     sNV9plus.bValidatorHadReset = 0;    
 

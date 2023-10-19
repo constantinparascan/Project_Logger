@@ -26,7 +26,7 @@
 /* constant defining how much time we wait for a command to be transmitted from 
    user board to SIMxxx board ...
  */
-#define AT_MAX_DELAY_WAIT_TRANSMISSION (100)
+#define AT_MAX_DELAY_WAIT_TRANSMISSION (500)
 
 
 #define AT_MAX_DELAY_WAIT_COUNTER (100)

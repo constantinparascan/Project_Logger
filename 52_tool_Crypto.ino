@@ -182,7 +182,7 @@ void tool_crypto_decrypt( unsigned char *buffer, int n )
  * 
  *     (OBS:) Also some improvements can be done - because some bytes have
  *      special meaning ... but this has not been taken into consideration here
- *      ... there is still rroom for improvements !!!
+ *      ... there is still room for improvements !!!
  *
  ********************************************************/
 int tool_crypto_brute_force_attack(void)
