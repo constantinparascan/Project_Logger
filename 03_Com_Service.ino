@@ -90,6 +90,8 @@ unsigned char nFlags_Com_Service_StartupMessageTransmitted = 0;
 /* delay used for the "PING" message */
 unsigned short nCom_Service_PingToServer_Delay = LOG_APP_PING_TO_SERVER_DELAY;
 
+unsigned short nCom_Service_Get_Signal_Strength_Delay = COM_SERVICE_MAX_WAIT_ITTER_SIGNAL_STRENGTH_DELAY;
+
 /* used to keep the HW configuration of the board ... */
 unsigned char  nCom_HW_Config_TYPE_Local = 0;
 
@@ -186,6 +188,11 @@ void Com_Service_Init(void)
     */
    nCallbackFlags = 0x00;
 
+   /* 
+    * init Delay counters ... 
+    */
+   nCom_Service_Get_Signal_Strength_Delay = COM_SERVICE_MAX_WAIT_ITTER_SIGNAL_STRENGTH_DELAY;
+
 }/* end function Com_Service_Init */
 
 
@@ -199,9 +206,10 @@ void Com_Service_main(void)
   unsigned short nTempCh1 = 0;
   unsigned short nTempCh2 = 0;
   unsigned short nTempCh3 = 0;
-  unsigned short nTempCh4 = 0;
+  unsigned short nTempCh4 = 0;  
   unsigned char  nLastBillTemp = 0;
   unsigned char  nLastErrorTemp = 0;
+  unsigned char  nTempRSSI = 0;
   unsigned char  nStatus = 0;
   unsigned char  nCommandFromServer = 0;
 
@@ -245,10 +253,25 @@ void Com_Service_main(void)
         /* reset init state flag ... */
         nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_INIT_FINISH;
 
-        eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP;
+        eComServiceState = COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH;
       }
     }
     break;
+
+
+    case COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH:
+    {
+      if( ( nCom_Service_Get_Signal_Strength_Delay > 0 ) && ( AT_Command_Is_New_RSSI_Computed() == 0 ) )
+      {
+        nCom_Service_Get_Signal_Strength_Delay --;
+      }
+      else
+      {
+        eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP;
+      }
+
+      break;
+    }
 
     /*
      * make sure "START" frame is transmitted ... 
@@ -272,9 +295,11 @@ void Com_Service_main(void)
           nTempCh2 = Logger_App_GetChannelValue( 2 );
           nTempCh3 = Logger_App_GetChannelValue( 3 );
           nTempCh4 = Logger_App_GetChannelValue( 4 );
-        }        
+        } 
+      
+      nTempRSSI = AT_Command_GET_RSSI_Level();
 
-      nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'S', 0 );
+      nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'S', 0, nTempRSSI );
       
       /* go to next state only if there has been a successful start command accepted by the lower layers ... */
       if( nStatus > 0 )
@@ -351,9 +376,9 @@ void Com_Service_main(void)
             nTempCh4 = Logger_App_GetChannelValue( 4 );
           }        
 
+        nTempRSSI = AT_Command_GET_RSSI_Level();
 
-
-        nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'P', 0 );
+        nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'P', 0 , nTempRSSI);
         //nStatus = 1;  // for debug porpuses ...
       
         /* if the COM layer has successfully passed the request downstream to AT layer ... then we erase the request bit, otherwise try again next time ... */      
@@ -401,7 +426,9 @@ void Com_Service_main(void)
             nLastBillTemp = Logger_App_Get_LastBillType();
           }
 
-        nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v2(nTempCh1, nTempCh2, nTempCh3, nTempCh4, nLastBillTemp );
+        nTempRSSI = AT_Command_GET_RSSI_Level();
+
+        nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v2(nTempCh1, nTempCh2, nTempCh3, nTempCh4, nLastBillTemp, nTempRSSI);
 
         /* if the COM layer has successfully passed the request downstream to AT layer ... then we erase the request bit, otherwise try again next time ... */      
         if( nStatus > 0 )
@@ -440,7 +467,9 @@ void Com_Service_main(void)
           nLastBillTemp = Logger_App_Get_LastBillType();
           nLastErrorTemp = Logger_App_Get_LastErrorValue();
 
-          nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, nLastBillTemp, 'E',  nLastErrorTemp);
+          nTempRSSI = AT_Command_GET_RSSI_Level();
+
+          nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, nLastBillTemp, 'E',  nLastErrorTemp, nTempRSSI);
           //nStatus = 1;
       
           if( nStatus > 0 )
@@ -537,8 +566,9 @@ void Com_Service_main(void)
                     NvM_Write_Block(NVM_BLOCK_CHAN_10_ID);
                   }
 
+        nTempRSSI = AT_Command_GET_RSSI_Level();
 
-        nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'A', 0 );
+        nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'A', 0, nTempRSSI );
 
         /* if the transmission request has been accepted ... */
         if( nStatus > 0 )
@@ -591,7 +621,8 @@ void Com_Service_main(void)
  */
 unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v2(unsigned short nChan1, unsigned short nChan2, \
                                                                                   unsigned short nChan3, unsigned short nChan4, \
-                                                                                  unsigned char  nLastBillType)
+                                                                                  unsigned char  nLastBillType, \
+                                                                                  unsigned char nRSSI)
 {
   char arrLocalBuff[255];
   char arrDummy[50];
@@ -625,7 +656,8 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
   strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Device );  
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_DEFAULT_RSSI );  
+  snprintf( arrDummy, 50,"%d", nRSSI );
+  strcat(arrLocalBuff, arrDummy );
 
   strcat(arrLocalBuff, "\"\r");
 
@@ -654,7 +686,8 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
  */
 unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(unsigned short nChan1, unsigned short nChan2, \
                                                                                   unsigned short nChan3, unsigned short nChan4, \
-                                                                                  unsigned char  nLastBillType, unsigned char nFrameType, unsigned char nErrorVal)
+                                                                                  unsigned char  nLastBillType, unsigned char nFrameType, unsigned char nErrorVal, \
+                                                                                  unsigned char nRSSI)
 {
   char arrLocalBuff[255];
   char arrDummy[50];
@@ -764,7 +797,8 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
   strcat(arrLocalBuff, arrNvM_RAM_Mirror_Str_Device );  
   strcat(arrLocalBuff, ";");
 
-  strcat(arrLocalBuff, LOG_APP_DEFAULT_RSSI );  
+  snprintf( arrDummy, 50,"%d", nRSSI );
+  strcat(arrLocalBuff, arrDummy );
 
   strcat(arrLocalBuff, "\"\r");
 

@@ -22,6 +22,7 @@ typedef enum TAG_ComService_State
 {
   COM_SERVICE_STATE_STARTUP = 0,
   COM_SERVICE_STATE_QUERY_SERVER,
+  COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH,
   COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP,
   COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT,
   COM_SERVICE_STATE_FULL_COM,
@@ -40,11 +41,13 @@ void Com_Service_main_AT(void);
 unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission(unsigned char nType);
 unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v2(unsigned short nChan1, unsigned short nChan2, \
                                                                                   unsigned short nChan3, unsigned short nChan4, \
-                                                                                  unsigned char  nLastBillType);
+                                                                                  unsigned char  nLastBillType, \
+                                                                                  unsigned char  nRSSI);
 
 unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(unsigned short nChan1, unsigned short nChan2, \
                                                                                   unsigned short nChan3, unsigned short nChan4, \
-                                                                                  unsigned char  nLastBillType, unsigned char nFrameType, unsigned char nErrorVal);
+                                                                                  unsigned char  nLastBillType, unsigned char nFrameType, unsigned char nErrorVal, \
+                                                                                  unsigned char  nRSSI);
                                                                                   
 unsigned char Com_Service_Client_Is_Comm_Free(void);
 

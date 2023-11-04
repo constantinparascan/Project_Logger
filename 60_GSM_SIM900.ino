@@ -59,15 +59,21 @@ unsigned char nLastServerResponse_Data_Len = 0;
 
 
 
-//unsigned char nIsGSM_Command_Request;
 unsigned char nstrProcessIdx;
 
+/* index used to loop inside init AT command sequence ...  arrAT_GsmInitCmdSet */
 unsigned char  nAT_Command_Init_Sequence = 0;
+/* index used to loop inside a normal frame transmission sequence ... arrAT_Gsm_COMAND_Step1 */
+unsigned char  nAT_Command_Step1_Sequence_Idx = 0;
 unsigned short nAT_Command_Transmission_Wait_Counter = 0;
 unsigned short nAT_Command_Response_Wait_Counter = 0;
 
 unsigned char nAT_ERROR_Limit_Retry_Counter = AT_MAX_ERROR_RETRY_COUNTER;
 
+
+unsigned short nAT_RSSI_Extractor_Counter = AT_RSSI_DELAY_COUNTER;
+unsigned char  nAT_RSSI_Signal_Quality_Value = 0;
+unsigned char  nAT_RSSI_Signal_Quality_Update_Flag = 0;
 
 
 /*************************************************/
@@ -181,9 +187,9 @@ ISR(USART3_RX_vect)
 
 void AT_Command_Processor_Enable_Transmission(void);
 void AT_Send_Command_Expect_Response_InitSeq(unsigned char *strCmd, unsigned char *strResp);
-unsigned char AT_Check_Response_vs_Expected(void);
 unsigned char AT_Command_Decode_Rx_Buff(void);
 unsigned char AT_Command_Decode_Rx_Buff_v2(void);
+unsigned short AT_Command_Decode_CSQ_Rx_Buff(unsigned char* strResp, unsigned short nMaxIdx);
 
 unsigned char ArrDebugEcho[255];
 void AT_Debug_Echo(void);
@@ -248,6 +254,11 @@ void AT_Command_Processor_Init(void)
      * this is the max number of errors 
      */
     nAT_ERROR_Limit_Retry_Counter = AT_MAX_ERROR_RETRY_COUNTER;
+
+    /*
+     * ... during startup ... request faster the RSSI signal value ... 
+     */
+    nAT_RSSI_Extractor_Counter = 10;
 
     /*
      * Startup sequence will start from index "0" of command array ... 
@@ -359,22 +370,23 @@ typedef struct Tag_AT_GSM_INIT_COMMAND_SET
  *  AT+HTTPREAD                      -> +HTTPREAD:1159 <!DOCTYPE .....</html> OK
  */
 
-
-
+/*
+ * INIT sequence 
+ *      - contains AT commands one after another with the corresponding waiting time
+ */
 const T_AT_GsmInitCmdSet arrAT_GsmInitCmdSet[ MAX_INIT_SEQUENCE_LENGTH ] = \
 { \
 
 	{"AT\r", "OK", "", "", 200, NO_SKIP_NEXT_CMD, 200}, \
-
-//  {"AT+CPIN?\r","+CPIN: SIM PIN", 100, NO_SKIP_NEXT_CMD}, 
   {"AT+CPIN?\r","+CPIN: READY", "", "+CPIN: SIM PIN", 200, SKIP_NEXT_CMD_IF_TRUE, 200}, \
 	{"AT+CPIN="AT_SIM_CARD_PIN_NR"\r", "OK", "", "", 1000, NO_SKIP_NEXT_CMD, 5000}, \
 
-// wait until connected to an opperator ....
-// +COPS: 0 OK --> no connection
-// +COPS: 0,0,"orange"
-//--> new modules SIM900  --> +COPS:0,0,"ora"
-//  {"AT+COPS?\r", "orange", "", "", 5000, NO_SKIP_NEXT_CMD, 1000}, \
+/* wait until connected to an opperator ....
+   +COPS: 0 OK --> no connection
+   +COPS: 0,0,"orange"
+   --> new modules SIM900  --> +COPS:0,0,"ora"
+   {"AT+COPS?\r", "orange", "", "", 5000, NO_SKIP_NEXT_CMD, 1000}, \
+*/
 
   {"AT+COPS?\r", "ora", "", "", 5000, NO_SKIP_NEXT_CMD, 1000}, \
 
@@ -383,17 +395,14 @@ const T_AT_GsmInitCmdSet arrAT_GsmInitCmdSet[ MAX_INIT_SEQUENCE_LENGTH ] = \
 
   {"AT+SAPBR=3,1,\"Contype\",\"GPRS\"\r", "OK", "", "", 200, NO_SKIP_NEXT_CMD, 200}, \	
   {"AT+SAPBR=3,1,\"APN\",\"net\"\r", "OK", "", "", 200, NO_SKIP_NEXT_CMD, 200}, \
-
-/*
- * Orange folosește APN "internet" sau "net", vezi care îți funcționează. 
-                                        "net-fix"
- */
+ /*
+  * Orange uses APN "internet" or "net", "net-fix"
+  */
 
   {"AT+SAPBR=1,1\r", "OK", "", "", 500, NO_SKIP_NEXT_CMD, 100}, \
   {"AT+SAPBR=2,1\r", "OK", "", "", 500, NO_SKIP_NEXT_CMD, 100}, \
 
   {"AT+HTTPINIT\r", "OK", "", "", 1000, NO_SKIP_NEXT_CMD, 100}, \
-/*  {"AT+HTTPSSL=1\r", "OK", "", "", 200, NO_SKIP_NEXT_CMD}, \   */
   {"AT+HTTPPARA=\"CID\",1\r", "OK", "", "", 200, NO_SKIP_NEXT_CMD, 100}, \
   {"AT+HTTPPARA=\"URL\",\"http://145.239.84.165:35269/gsm/index.php\"\r", "OK", "", "", 200, NO_SKIP_NEXT_CMD, 100}, \
   {"AT+HTTPACTION=0\r", "OK", "", "", 5000, NO_SKIP_NEXT_CMD, 5000}, \
@@ -411,27 +420,27 @@ const T_AT_GsmInitCmdSet arrAT_GsmInitCmdSet[ MAX_INIT_SEQUENCE_LENGTH ] = \
    *
 
    */
-//{"AT+HTTPACTION=0\r", "+HTTPACTION:", 5000}
   {"AT+HTTPREAD\r", "!DOCTYPE", "", "", 5000, NO_SKIP_NEXT_CMD, 100}
 };
 
-T_AT_GsmInitCmdSet CMD_URL_CHANNEL = {"AT+HTTPPARA=\"URL\",\"http://145.239.84.165:35269/gsm/index.php\"\r", "OK", 200};
-
-
 /*
- *  Command transmission sequence ...
+ *  a simple URL AT command transmission sequence ...
  *
  */
-unsigned char nAT_Command_Step1_Sequence_Idx;
-
 T_AT_GsmInitCmdSet arrAT_Gsm_COMAND_Step1 [ MAX_COMMAND_STEP_1 ] = 
 {
   {"", "OK", "", "", 100, NO_SKIP_NEXT_CMD, 100},
   {"AT+HTTPACTION=0\r", "OK", "", "", 100, NO_SKIP_NEXT_CMD, 100},
-  {"AT+HTTPREAD\r", "****", "", "", 200, NO_SKIP_NEXT_CMD, 100}     /* <<<<<<<<<<<<< robustness actions required !!!!    [TODO !!!!] */
+  {"AT+HTTPREAD\r", "****", "", "", 200, NO_SKIP_NEXT_CMD, 100}         /* <<<<<<<<<<<<< robustness actions required !!!!    [TODO !!!!] */
                                                                         /*
                                                                          *   >>>>> search for CMD or *** !!!! or nothing to search !!!! no !DOCTYPE is returned
                                                                          */  
+};
+
+
+T_AT_GsmInitCmdSet arrAT_Gsm_COMMAND_RSSI[ 1 ] = 
+{
+  {"AT+CSQ\r", "OK", "", "", 100, NO_SKIP_NEXT_CMD, 0}
 };
 
 unsigned char arrAT_Gsm_COMMAND_Generic_HTTP_Request[200];
@@ -459,12 +468,17 @@ void AT_Send_Command_Expect_Response_InitSeq(unsigned char *strCmd, unsigned cha
 }/* AT_Send_Command_Expect_Response */
 
 /**************************************************************************/
+
+
 /*
-*/
+ * API used to trigger an HTTP request
+ */
 unsigned char AT_Command_Processor_Send_URL_Message(char* strMessage)
 {
   unsigned char nReturn = 0;
 
+  /* request is accepted only if AT internal state machine is iddle ...
+   */
   if( eAT_Processor_State == AT_STATE_PROCESSOR_IDDLE )
   {
     if( strlen(strMessage) < USART_TX_AT_BUFFER_LENGTH )
@@ -475,43 +489,140 @@ unsigned char AT_Command_Processor_Send_URL_Message(char* strMessage)
 		/* start from index 0 ... */
     nAT_Command_Step1_Sequence_Idx = 0;
 
-    //eAT_Processor_State = AT_STATE_PROCESSOR_SEND_COMMAND;
     eAT_Processor_State = AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ;
+
+    /* restart counter ... after a communication we wait again until we req RSSI value ... */
+    nAT_RSSI_Extractor_Counter = AT_RSSI_DELAY_COUNTER;
 
     nReturn = 1;
   }
 
   return nReturn;
-}
+}/* end AT_Command_Processor_Send_URL_Message */
 
-unsigned char AT_Check_Response_vs_Expected(void)
+
+/* 
+ * API used to trigger an RSSI (Received Signal Strength Indicator) value retrieval 
+ */
+unsigned char AT_Command_Request_RSSI(void)
 {
-	unsigned short nIdx = 0;
-	unsigned char nReturn = 1;
+  unsigned char nReturn = 0;
 
-	/* flag indicating that the response string is completed */
-	if( nAT_Resp_Rx_Complete )
-	{
-		while( (arr_AT_Resp_BuffRx[nIdx] != '\n') && (arr_AT_Resp_BuffRx[nIdx] != '\r') && (ptrAT_Response_Rx[nIdx] != '\0') )
-		{
-			if( arr_AT_Resp_BuffRx[nIdx] != ptrAT_Response_Rx[nIdx] )
-			{
-				nReturn = 0;
-        break;
-			}
+  if( eAT_Processor_State == AT_STATE_PROCESSOR_IDDLE )
+  {
+    eAT_Processor_State = AT_STATE_PROCESSOR_SEND_RSSI_LEVEL;
 
-			nIdx ++;
-		}
-	}
+    nReturn = 1;
+  }
 
-	return nReturn;
+  return nReturn;
+}/* end AT_Command_Request_RSSI */
+
+
+/*
+ * API used to indicate if a new value of RSSI has been retrieved
+ */
+unsigned char AT_Command_Is_New_RSSI_Computed(void)
+{
+  return nAT_RSSI_Signal_Quality_Update_Flag;
 }
+
+
+/* 
+ * API used to retrieve the RSSI value from local buffer after receiveing it from SIM900
+ * 
+ *    - map the RSSI value received from SIM900 : 0,1, ... 31, 99 to a value that can be used by the current server application
+ */
+unsigned char AT_Command_GET_RSSI_Level(void)
+{
+  unsigned char nMapped_RSSI_Signal_Value = 0;
+
+  nAT_RSSI_Signal_Quality_Update_Flag = 0;
+
+
+  /* Server mappings:
+   *
+      'rssi_semnal_fslab' < 14; // sub aceasta valoare, pentru $app['frecventa_semnal_slab'] consecutive se va da un mesaj 
+      'rssi_semnal_slab'  < 18;
+      'rssi_semnal_mediu' < 23;
+      'rssi_semnal_bun'   < 26;
+      'rssi_semnal_fbun'  < 39;   
+   *
+   */
+
+  /* 
+   * !! verry week signal !!
+   */
+  if( (nAT_RSSI_Signal_Quality_Value > 90) || (nAT_RSSI_Signal_Quality_Value <= 1) )
+  {
+    /* actually any value < 14 will do ... */
+    nMapped_RSSI_Signal_Value = 1;
+  }
+  else
+  {
+
+   /* 
+    * !! week signal !!
+    */
+    /* RSSI <= -100 dBm --> according to SIM900 book ... -100 dBm = 7*/
+    if( nAT_RSSI_Signal_Quality_Value <= 7 )
+    {
+      /* actually any value < 18 will do ... */
+      nMapped_RSSI_Signal_Value = 16;
+    }
+    else
+    {
+
+     /* 
+      * !! medium signal !!
+      */
+      /* RSSI <= -84 dBm --> according to SIM900 book ... -84 dBm = 15*/
+      if( nAT_RSSI_Signal_Quality_Value <= 15 )
+      {
+        /* actually any value < 23 will do ... */
+        nMapped_RSSI_Signal_Value = 20;
+      }
+      else
+      {
+        /* 
+         * !! good signal !!
+         */
+         /* RSSI <= -70 dBm --> according to SIM900 book ... -70 dBm = 22*/
+        if( nAT_RSSI_Signal_Quality_Value <= 22 )
+        {
+          /* actually any value < 26 will do ... */
+          nMapped_RSSI_Signal_Value = 25;
+        }
+        else
+        {
+          /* 
+           * !! excellent signal !!
+           */
+          nMapped_RSSI_Signal_Value = 35; 
+        }
+      }
+    }
+  }
+
+  return nMapped_RSSI_Signal_Value;
+  
+}/* end AT_Command_GET_RSSI_Level */
+
 
 /*=================================================================================*/
 
 
+/* 
+ * SIM900 driver main function
+ *
+ *    - implements the full communication protocol with SIM900 using AT commands
+ *    - must be ciclically called inside a scheduler - currently 5ms reccurence task
+ */
 void AT_Command_Processor_Main(void)
 {
+
+  unsigned char* strLocalPtr = 0;
+
   /*
    *  Process ... state independent timers ...
    *     - timer is reset each time a new character is received over USART
@@ -527,6 +638,11 @@ void AT_Command_Processor_Main(void)
    */
 	switch (eAT_Processor_State)
 	{
+
+    /*
+     * short delay during power on 
+     *    - used to stabilize the power supply for the SIM900 board ...
+     */
     case AT_STATE_INIT_BEFORE_STARTUP_DELAY:
     {
       if( nAT_Power_On_Before_Startup_Delay > 0 )
@@ -540,6 +656,11 @@ void AT_Command_Processor_Main(void)
     }
     break;
 		
+
+    /*
+     * - after power-on ... the SIM900 is in shut-down mode 
+     * - toggle the POWER ON line in order to generate a START-UP opperation on SIM900
+     */
     case AT_STATE_INIT_POWER_ON_START:
       {
         digitalWrite( ARDUINO_DIG_OUT_POWER_LINE, 1 );
@@ -554,6 +675,9 @@ void AT_Command_Processor_Main(void)
       }
       break;
     
+    /*
+     * - keep - power-on request line to "high" at least 1 sec - in order for the SIM900 to start-up ...
+     */
     case AT_STATE_INIT_POWER_ON_WAIT_STARTUP:
       {
         if( nAT_Power_On_Switch_Delay > 0 )
@@ -575,6 +699,9 @@ void AT_Command_Processor_Main(void)
       break;
 
 
+    /*
+     * Reset state for the SIM900 board ... by triggering the "Reset" pin we re-initialize the SIM board.
+     */
     case AT_STATE_INIT_RESET:
       {
         digitalWrite( ARDUINO_DIG_OUT_RESET_LINE, 1 );
@@ -589,6 +716,9 @@ void AT_Command_Processor_Main(void)
       }
       break;
 
+    /*
+     * Reset request must be kept at least 1sec ... 
+     */
     case AT_STATE_INIT_RESET_WAIT_STARTUP:
       {
         if( nAT_Reset_On_Switch_Delay > 0 )
@@ -832,9 +962,6 @@ void AT_Command_Processor_Main(void)
           /* 
            * command has been correctly executed ... 
            */
-          //if( strstr(arr_AT_Resp_BuffRx, "OK" ) )
-          //{
-
             nAT_Delay_AfterCommand = arrAT_GsmInitCmdSet[nAT_Command_Init_Sequence].nDelayAfterCommand;
 
 
@@ -907,10 +1034,9 @@ void AT_Command_Processor_Main(void)
                   /* wait additional commands from user ... 
                      ... INIT is over ... 
                   */
-                  eAT_Processor_State = AT_STATE_PROCESSOR_IDDLE;
+                   eAT_Processor_State = AT_STATE_PROCESSOR_IDDLE;    
 
-
-                  AT_Command_Callback_Notify_Init_Finished();
+                   AT_Command_Callback_Notify_Init_Finished();
 
                   #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
                     Serial.println("[I] Init FINISH - goto IDDLE ...");
@@ -952,27 +1078,6 @@ void AT_Command_Processor_Main(void)
               }            
 
             }/* end else if( strstr( arr_AT_Resp_BuffRx, arrAT_GsmInitCmdSet[nAT_Command_Init_Sequence].str_Exp_Rx_Resp_OK) ) */
-
-          // }/* if( strstr(arr_AT_Resp_BuffRx, "OK" ) .... ) */
-          // else
-          // {
-          //   /*
-          //    * [ToDo] ... there is no OK and no ERROR ... 
-          //    * ... we have received something in the Rx buffer that we don'tknow how to deal with ... ? 
-          //    *
-          //    *
-          //    */
-          //    if( strlen(arr_AT_Resp_BuffRx) > 2 )
-          //    {
-          //       #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
-          //         Serial.println("[I] ???? NO Valid answer  ... RETRY !!! or RESET ");
-          //       #endif
-
-          //     eAT_Processor_State = AT_STATE_INIT_SEQ_SEND_COMMAND;
-
-          //    }
-
-          // } /* else if( strstr(arr_AT_Resp_BuffRx, "OK" ) .... ) */
 
         }/* else if strstr(arr_AT_Resp_BuffRx, "ERROR") || (strlen(arr_AT_Resp_BuffRx) < 2)   */
 
@@ -1037,12 +1142,15 @@ void AT_Command_Processor_Main(void)
 
 		case AT_STATE_PROCESSOR_IDDLE:
 		{
-		//	if(nIsGSM_Command_Request)
-//			{
-	//			nIsGSM_Command_Request = 0;
 
-		//		eAT_Processor_State = AT_PROCESSOR_STATE_SEND_COMMAND;
-			//}
+      if(nAT_RSSI_Extractor_Counter > 0 )
+      {
+        nAT_RSSI_Extractor_Counter --;
+      }
+      else      
+      {
+        eAT_Processor_State = AT_STATE_PROCESSOR_SEND_RSSI_LEVEL;
+      }
 
       break;
 		}
@@ -1434,7 +1542,135 @@ void AT_Command_Processor_Main(void)
       eAT_Processor_State = AT_STATE_PROCESSOR_IDDLE;
 
       break;
-    }
+
+    }/* AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ_DECODE_RESPONSE */
+
+
+    case AT_STATE_PROCESSOR_SEND_RSSI_LEVEL:
+    {
+      #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
+        Serial.print("[I] Send RSSI: ");
+        Serial.println( (const char *)arrAT_Gsm_COMMAND_RSSI [ 0 ].str_TxCommand );
+      #endif
+
+
+			/* prepare transmission buffers ... only one command .... */
+			AT_Send_Command_Expect_Response_InitSeq( arrAT_Gsm_COMMAND_RSSI[ 0 ].str_TxCommand, \
+                                               arrAT_Gsm_COMMAND_RSSI[ 0 ].str_Exp_Rx_Resp_OK );
+
+      /* load maximum time that we can wait for a respone to be received from the SIMxxx board ... otherwise ERROR ... */
+			nAT_Command_Response_Wait_Counter = arrAT_Gsm_COMMAND_RSSI[ 0 ].nWaitRespTimer;
+
+      /* load maximum time that we can wait for a transmission to be done to SIMxxx board      ... otherwise ERROR ... */
+      nAT_Command_Transmission_Wait_Counter = AT_MAX_DELAY_WAIT_TRANSMISSION;
+
+      /* Reset counters and flags ... prepare for transmission ...
+       */
+      AT_Command_Processor_Reset_Reception();
+
+      /* advance state */
+			eAT_Processor_State = AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_WAIT_TRANSMISSION;
+    
+      break;
+
+    }/* AT_STATE_PROCESSOR_SEND_RSSI_LEVEL */
+
+
+    case AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_WAIT_TRANSMISSION:
+    {
+      /* transmission complete ... advance state ... */
+      if(nAT_Command_Tx_Complete)
+      {
+        eAT_Processor_State = AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_WAIT_RESPONSE;
+      }
+      else
+      {
+       /* are we still waiting for the transmission ???? ... can be an communication configuration ERROR ?? */
+        if(nAT_Command_Transmission_Wait_Counter > 0)
+        {
+          nAT_Command_Transmission_Wait_Counter --;
+        }
+        else
+        {
+          /* 
+              !!! Transmission Error !!!      [ToDo --- currently retry indefinitely !!!]
+
+              REPEAT TRANSMISSION ?? .... how many times ? 
+          */
+          eAT_Processor_State = AT_STATE_PROCESSOR_SEND_RSSI_LEVEL;
+
+
+          /*
+          * [ToDo] ... STOP retransmission ... and re-init fully AT module
+          * 
+          * Failed transmission is the fault of Arduino board and not the problem of SIM module ... 
+          *   ... check of Reset namager is possible ... (reset request module that checks if allowed a watchdog reset ... )
+          */
+
+          #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
+            Serial.print("[I] RSSI command ERROR Transmission delay ... Retry ...");
+          #endif          
+        }
+      }
+      
+      break;
+    }/* AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_WAIT_TRANSMISSION */
+
+
+    case AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_WAIT_RESPONSE:
+    {
+
+      /*
+       * ... is there a response in the Rx buffer even before the timout expiration ?
+       */
+      if( strstr(arr_AT_Resp_BuffRx, "ERROR") || strstr(arr_AT_Resp_BuffRx, "OK") )
+      {
+        /*
+         * there is a response that has been received ... advance state ...
+         */
+
+        eAT_Processor_State = AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_PROCESS_RESPONSE;
+      }
+      else
+      {
+        /*  still waiting ... ?  */
+        if(nAT_Command_Response_Wait_Counter > 0)
+        {
+          nAT_Command_Response_Wait_Counter --;
+        }
+        else
+        {
+          /*
+          * response timeout has been finished ... 
+          */
+          eAT_Processor_State = AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_PROCESS_RESPONSE;
+        }
+        
+      }
+
+      break;
+
+    }/* AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_WAIT_RESPONSE */
+
+
+    case AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_PROCESS_RESPONSE:
+    {
+
+      /* We are in a communication silence timeout gap 
+       *   ... we should check the response ... 
+       */
+        
+      nAT_RSSI_Signal_Quality_Value = AT_Command_Decode_CSQ_Rx_Buff(arr_AT_Resp_BuffRx, nAT_Resp_Rx_Idx);
+      nAT_RSSI_Signal_Quality_Update_Flag = 1;
+
+
+      nAT_RSSI_Extractor_Counter = AT_RSSI_DELAY_COUNTER;
+
+      eAT_Processor_State = AT_STATE_PROCESSOR_IDDLE;
+
+      break;
+
+    }/* AT_STATE_PROCESSOR_SEND_RSSI_LEVEL_PROCESS_RESPONSE */
 
 		default:
       break;
@@ -1442,6 +1678,64 @@ void AT_Command_Processor_Main(void)
 	}/* switch (eAT_Processor_State) */
   
 }/* void AT_Command_Processor_Main(void) */
+
+
+
+unsigned short AT_Command_Decode_CSQ_Rx_Buff(unsigned char* strResp, unsigned short nMaxIdx)
+{
+  unsigned short nRSSI_Local_Value = 0;  
+  unsigned short nIdx = 0;
+
+
+  #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
+    Serial.println();
+    Serial.print("[I] RSSI Received: ");
+    Serial.println((const char *)strResp);
+  #endif
+
+
+  /*
+   * ... try to decode  ..... +CSQ: 14,0 .... 
+   */
+
+  if( ( nMaxIdx > 0 ) && ( nMaxIdx < USART_RX_AT_BUFFER_LENGTH) )
+  {
+    for(nIdx = 0; nIdx < nMaxIdx - 4; nIdx ++)
+    {
+      if( ( strResp[nIdx] == ':' ) && ( strResp[nIdx + 4] == ',' ) )
+      {
+        if( (strResp[nIdx + 1] >= '0') && (strResp[nIdx + 1] <= '9') )
+        {
+          nRSSI_Local_Value = (unsigned short)(strResp[nIdx + 1] - '0');
+        }
+
+        if( (strResp[nIdx + 2] >= '0') && (strResp[nIdx + 2] <= '9') )
+        {
+          nRSSI_Local_Value = nRSSI_Local_Value * 10;
+          nRSSI_Local_Value += (unsigned short)(strResp[nIdx + 2] - '0');
+        }
+
+        if( (strResp[nIdx + 3] >= '0') && (strResp[nIdx + 3] <= '9') )
+        {
+          nRSSI_Local_Value = nRSSI_Local_Value * 10;
+          nRSSI_Local_Value += (unsigned short)(strResp[nIdx + 3] - '0');
+        }
+
+        break;
+      }
+        
+    }
+  }
+
+
+  #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE >= 1)
+      Serial.print("Signal Strength: ");
+      Serial.print(nRSSI_Local_Value);
+      Serial.println();    
+  #endif
+
+  return nRSSI_Local_Value;
+}
 
 
 
@@ -1664,7 +1958,7 @@ unsigned char AT_Command_Processor_Is_Iddle(void)
 {
   unsigned char nReturn = 0;
 
-  if(eAT_Processor_State == AT_STATE_PROCESSOR_IDDLE)
+  if( eAT_Processor_State == AT_STATE_PROCESSOR_IDDLE )
   {
     nReturn = 1;
   }

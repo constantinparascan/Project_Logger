@@ -9,10 +9,11 @@
  *          SLOT  2 - production - CCTALK - ETH
  *
  *          SLOT  3 - production - PARALLEL - SIM900
+ *          SLOT  4 - production - CCTALK + PARALLEL - SIM900
  * 
  *          SLOT 99 - debug
  */
-#define BOARD_CONFIG_SLOT (4)    /* <<<------------------------- CONFIG the Board !!! */
+#define BOARD_CONFIG_SLOT (3)    /* <<<------------------------- CONFIG the Board !!! */
 
 
 /* ---------------------------*/
@@ -237,7 +238,7 @@
 
 #define LOG_APP_SIM_SN "1111111111111111111"      /* 25 chars MAX - including NULL */
 #define LOG_APP_SIM_PHONE_NR "0726734732"         /* 10 chars MAX - NOT including NULL */
-#define LOG_APP_SIM_OPERATOR "RDS"                /* 15 chars MAX - including NULL */
+#define LOG_APP_SIM_OPERATOR "ORANGE"             /* 15 chars MAX - including NULL */
 
 /* Location specific details  */
 #define LOG_APP_TOWN    "BUC_TEST_3"               /* 15 chars MAX - NOT including NULL */
