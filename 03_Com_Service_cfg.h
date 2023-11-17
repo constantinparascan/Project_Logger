@@ -14,6 +14,9 @@
  */
 #define COM_SERVICE_MAX_WAIT_ITTER_SIGNAL_STRENGTH_DELAY (500)
 
+#define COM_SERVICE_MAX_WAIT_ITTER_BEFORE_START_REQ (100)
+
+
 /*
  * ... how much time we wait for a message to be transmitted and a response to be received
  * ... until a re-transmission will be done ... 

@@ -257,7 +257,7 @@ void AT_Command_Processor_Init(void)
 
     /*
      * ... during startup ... request faster the RSSI signal value ... 
-     */
+     */    
     nAT_RSSI_Extractor_Counter = 10;
 
     /*
@@ -389,6 +389,11 @@ const T_AT_GsmInitCmdSet arrAT_GsmInitCmdSet[ MAX_INIT_SEQUENCE_LENGTH ] = \
 */
 
   {"AT+COPS?\r", "ora", "", "", 5000, NO_SKIP_NEXT_CMD, 1000}, \
+  /* This is STUPID for ORANGE !!!!
+   *
+   *    this idiots change from sim to sim the COPS prams from "ora" to "orange" to "RO ORANGE" ... I wonder how many combinations are possible !!!!
+   */
+
 
 	{"AT+CGATT?\r", "+CGATT: 1","", 1000, SKIP_NEXT_CMD_IF_TRUE, 1000},  \
 	{"AT+CGATT=1\r", "OK", "", "", 1000, NO_SKIP_NEXT_CMD, 1000},  \ 
@@ -607,6 +612,56 @@ unsigned char AT_Command_GET_RSSI_Level(void)
   return nMapped_RSSI_Signal_Value;
   
 }/* end AT_Command_GET_RSSI_Level */
+
+
+/* Re-implementation of "strstr" with the addition that we are not sensitive to string "case" of the letters
+ *    - also I'm aware that by limiting the range with the mask 0x1F it is possible to match special chars or
+ *      or different chars that are not equal to what we are looking for ... but !! it's fast and it will fail
+ *      for sure since GSM suppliers will have no special chars in their name !
+ */
+char * AT_Command_strstr_case_insensitive(const char *str, const char *substring)
+{
+    const char *a;
+    const char *b;
+
+    b = substring;
+
+    if (*b == 0) 
+    {
+        return (char *) str;
+    }
+
+    for ( ; *str != 0; str += 1) 
+    {
+        if ( (*str != *b) && ( (*str & 0x1F) != (*b &0x1F) ) )
+        {
+            continue;
+        }
+
+        a = str;
+        while (1) 
+        {
+            if (*b == 0) 
+            {
+                return (char *) str;
+            }
+
+            if ( (*a != *b) && ( (*a & 0x1F) != (*b & 0x1F) ) )
+            {
+                break;
+            }
+            else
+            {
+              a++;
+              b++;
+            }            
+        }
+
+        b = substring;
+    }
+
+    return NULL;
+}
 
 
 /*=================================================================================*/
@@ -966,7 +1021,8 @@ void AT_Command_Processor_Main(void)
 
 
             /* is it the expected command to go to next state ? .... */
-            if( strstr( arr_AT_Resp_BuffRx, arrAT_GsmInitCmdSet[nAT_Command_Init_Sequence].str_Exp_Rx_Resp_OK) )
+            //if( strstr( arr_AT_Resp_BuffRx, arrAT_GsmInitCmdSet[nAT_Command_Init_Sequence].str_Exp_Rx_Resp_OK) || strstr( arr_AT_Resp_BuffRx, strupr(arrAT_GsmInitCmdSet[nAT_Command_Init_Sequence].str_Exp_Rx_Resp_OK)))
+            if( AT_Command_strstr_case_insensitive(arr_AT_Resp_BuffRx, arrAT_GsmInitCmdSet[nAT_Command_Init_Sequence].str_Exp_Rx_Resp_OK) )
             {
               if( arrAT_GsmInitCmdSet[nAT_Command_Init_Sequence].nSkipNextCmdIfOK == SKIP_NEXT_CMD_IF_TRUE )
               {
@@ -1127,6 +1183,12 @@ void AT_Command_Processor_Main(void)
       
         eAT_Processor_State = AT_STATE_INIT_POWER_ON_START;
 
+
+        /*
+         * notify COM layer that an re-initialization procedure has been started inside SIM900 driver !!
+         */
+        AT_Command_Callback_Notify_No_Communication_Error_Re_Init();
+        
         /*
          *  [ToDo] ... after several retries ... phisically reset board !!!!
          */
@@ -1182,24 +1244,24 @@ void AT_Command_Processor_Main(void)
 			  AT_Send_Command_Expect_Response_InitSeq( arrAT_Gsm_COMAND_Step1[nAT_Command_Step1_Sequence_Idx].str_TxCommand, \
                                                  arrAT_Gsm_COMAND_Step1[nAT_Command_Step1_Sequence_Idx].str_Exp_Rx_Resp_OK );
 
-/*        #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
+        #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE > 1)
           Serial.println("STATE - AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ");
           Serial.print("[I] Step 1 ... Send: ");
           Serial.println((const char *)arrAT_Gsm_COMAND_Step1[nAT_Command_Step1_Sequence_Idx].str_TxCommand);
         #endif
-*/
+
       }
       else
       {
         AT_Send_Command_Expect_Response_InitSeq( arr_AT_Generic_BuffTx, \
                                                  arrAT_Gsm_COMAND_Step1[nAT_Command_Step1_Sequence_Idx].str_Exp_Rx_Resp_OK );
-/*
-        #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
+
+        #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE > 1)
           Serial.println("STATE - AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ");
           Serial.print("[I] Step 1 ... Send: ");
           Serial.println((const char *)arr_AT_Generic_BuffTx);
         #endif
-*/        
+        
       }
 
 
@@ -1218,6 +1280,7 @@ void AT_Command_Processor_Main(void)
 //      #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
 //        Serial.println("UCSR3B:>");
 //        Serial.print(UCSR3B);
+//        Serial.println();
 //      #endif
 
 
@@ -1475,6 +1538,8 @@ void AT_Command_Processor_Main(void)
 
           eAT_Processor_State = AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_DELAY_AFTER_COMMAND;
       }
+
+      break;
     }
 
 

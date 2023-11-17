@@ -23,6 +23,7 @@ typedef enum TAG_ComService_State
   COM_SERVICE_STATE_STARTUP = 0,
   COM_SERVICE_STATE_QUERY_SERVER,
   COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH,
+  COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH_WAIT,
   COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP,
   COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT,
   COM_SERVICE_STATE_FULL_COM,
@@ -54,5 +55,6 @@ unsigned char Com_Service_Client_Is_Comm_Free(void);
 void AT_Command_Callback_Notify_Init_Finished(void);
 void AT_Command_Callback_Request_Bill_Status_Transmission(void);
 void AT_Command_Callback_Request_ERROR_Status_Transmission(void);
+void AT_Command_Callback_Notify_No_Communication_Error_Re_Init(void);
 
 #endif /* __COM_SERVICE_H__ */

@@ -92,8 +92,11 @@ unsigned short nCom_Service_PingToServer_Delay = LOG_APP_PING_TO_SERVER_DELAY;
 
 unsigned short nCom_Service_Get_Signal_Strength_Delay = COM_SERVICE_MAX_WAIT_ITTER_SIGNAL_STRENGTH_DELAY;
 
+unsigned short nCom_Service_Delay_Before_Start_Req = COM_SERVICE_MAX_WAIT_ITTER_BEFORE_START_REQ;
+
 /* used to keep the HW configuration of the board ... */
 unsigned char  nCom_HW_Config_TYPE_Local = 0;
+
 
 /* ************************************************************** */
 
@@ -148,6 +151,14 @@ void AT_Command_Callback_Request_ERROR_Status_Transmission(void)
   nCallbackFlags |= COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME;
 }
 
+/*
+ * Error in communicatation with the GSM provider ... re-initialization 
+ *    of the SIM driver has been started ...
+ */
+void AT_Command_Callback_Notify_No_Communication_Error_Re_Init(void)
+{
+  nCallbackFlags |= COM_FLAGS_CALLBACK_AT_COM_ERROR;
+}
 
 /* V0.1
  *
@@ -192,6 +203,7 @@ void Com_Service_Init(void)
     * init Delay counters ... 
     */
    nCom_Service_Get_Signal_Strength_Delay = COM_SERVICE_MAX_WAIT_ITTER_SIGNAL_STRENGTH_DELAY;
+   nCom_Service_Delay_Before_Start_Req = COM_SERVICE_MAX_WAIT_ITTER_BEFORE_START_REQ;
 
 }/* end function Com_Service_Init */
 
@@ -259,6 +271,11 @@ void Com_Service_main(void)
     break;
 
 
+    /*
+     * Wait for the RSSI signal strength to be extracted by the SIM900 driver
+     *  ... for an limited amount of time
+     *  ... otherwise just report-it with value "0"
+     */
     case COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH:
     {
       if( ( nCom_Service_Get_Signal_Strength_Delay > 0 ) && ( AT_Command_Is_New_RSSI_Computed() == 0 ) )
@@ -267,7 +284,31 @@ void Com_Service_main(void)
       }
       else
       {
-        eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP;
+        eComServiceState = COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH_WAIT;
+      }
+
+      break;
+    }
+
+    /*
+     * After requiring the signal strength from SIM900 ... implement a short delay ...
+     */
+    case COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH_WAIT:
+    {
+      if(nCom_Service_Delay_Before_Start_Req > 0)
+      {
+        nCom_Service_Delay_Before_Start_Req --;
+      }
+      else
+      {
+
+        /* 
+         * if previously a "start" message has been transmitted ... don't repeat transmission !
+         */
+        if( nFlags_Com_Service_StartupMessageTransmitted > 0)
+          eComServiceState = COM_SERVICE_STATE_FULL_COM;
+        else
+          eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP;
       }
 
       break;
@@ -277,6 +318,7 @@ void Com_Service_main(void)
      * make sure "START" frame is transmitted ... 
      */
     case COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP:
+    {
 
       /* 
        * Collect current status of channel (monetary) values ... and send them into a "Start" frame.
@@ -310,14 +352,22 @@ void Com_Service_main(void)
           Serial.println("[I] State: Sent START command ... goto COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT ...");
         #endif
 
+        /*
+         * indicate that the "Start-up" message has been transmitted to SIM900 ... until another reset/power-on no additional
+         *   startup messages will be transmitted !
+         */
+        nFlags_Com_Service_StartupMessageTransmitted ++;
+
       }
 
-    break;
+      break;
+    }
 
     /*
      * wait until the AT status becomes available ... 
      */
     case COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT:
+    {
 
       /* 
        * Got to "Full Com" state only after SIM900 driver has reached iddle state ...
@@ -331,7 +381,8 @@ void Com_Service_main(void)
         #endif
       }
 
-    break;    
+      break;    
+    }
 
 
     /*
@@ -347,57 +398,6 @@ void Com_Service_main(void)
 
     case COM_SERVICE_STATE_FULL_COM:
     {
-
-      /*
-       *
-       * Monitor PING
-       *    
-       */
-      if( nCom_Service_PingToServer_Delay == 0 )
-      {
-        /*
-         * Send PING Frame ...    [ToDo ----- !!!!! check if this can be moved LAST !!!!! -------------------------------------]
-         *
-         */
-
-        if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
-        {
-          nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
-          nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
-          nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
-          nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
-        }
-        else
-          if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
-          {
-            nTempCh1 = Logger_App_GetChannelValue( 1 );
-            nTempCh2 = Logger_App_GetChannelValue( 2 );
-            nTempCh3 = Logger_App_GetChannelValue( 3 );
-            nTempCh4 = Logger_App_GetChannelValue( 4 );
-          }        
-
-        nTempRSSI = AT_Command_GET_RSSI_Level();
-
-        nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'P', 0 , nTempRSSI);
-        //nStatus = 1;  // for debug porpuses ...
-      
-        /* if the COM layer has successfully passed the request downstream to AT layer ... then we erase the request bit, otherwise try again next time ... */      
-        if( nStatus > 0 )
-        {
-          /*
-           * Reset PING delay ...
-           */
-          
-          nCom_Service_PingToServer_Delay = LOG_APP_PING_TO_SERVER_DELAY;
-
-        }
-
-
-        #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM --> Send PING Req ");
-        #endif
-
-      }/* End PING !!  */
 
 
       /* *********************************
@@ -488,25 +488,64 @@ void Com_Service_main(void)
       }/* end if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME )  ... */
 
 
-      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_ERROR )
+      /* **************************************
+       *
+       * Monitor PING - send PING frame 
+       *    
+       * ************************************* */
+      if( nCom_Service_PingToServer_Delay == 0 )
       {
+        /*
+         * Send PING Frame ...  
+         *
+         */
 
-        nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_ERROR;
+        if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_PARALLEL )
+        {
+          nTempCh1 = Logger_App_Parallel_GetChannelValue( 0 );
+          nTempCh2 = Logger_App_Parallel_GetChannelValue( 1 );
+          nTempCh3 = Logger_App_Parallel_GetChannelValue( 2 );
+          nTempCh4 = Logger_App_Parallel_GetChannelValue( 3 );
+        }
+        else
+          if( nCom_HW_Config_TYPE_Local == AUTOMAT_BOARD_CONFIG_HW_TYPE_CCTALK )
+          {
+            nTempCh1 = Logger_App_GetChannelValue( 1 );
+            nTempCh2 = Logger_App_GetChannelValue( 2 );
+            nTempCh3 = Logger_App_GetChannelValue( 3 );
+            nTempCh4 = Logger_App_GetChannelValue( 4 );
+          }        
 
-        eComServiceState = COM_SERVICE_STATE_NO_COM_ERROR;
+        nTempRSSI = AT_Command_GET_RSSI_Level();
+
+        nStatus = Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v3(nTempCh1, nTempCh2, nTempCh3, nTempCh4, 0, 'P', 0 , nTempRSSI);
+        //nStatus = 1;  // for debug porpuses ...
+      
+        /* if the COM layer has successfully passed the request downstream to AT layer ... then we erase the request bit, otherwise try again next time ... */      
+        if( nStatus > 0 )
+        {
+          /*
+           * Reset PING delay ...
+           */
+          
+          nCom_Service_PingToServer_Delay = LOG_APP_PING_TO_SERVER_DELAY;
+
+        }
+
 
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: COM_SERVICE_STATE_NO_COM_ERROR ... Com Error ...");
+          Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM --> Send PING Req ");
         #endif
 
-      }
+      }/* End PING !!  */
 
 
-      /* 
+
+      /* ****************************************************
        *
-       *   see if any new commands from Server !!! ... 
+       *   Check if any new commands from Server !!! ... 
        *       
-       */
+       * **************************************************** */
       if( AT_Command_Is_New_Command_From_Server() != 0 )
       {
         nCommandFromServer = AT_Command_Read_Last_Command_From_Server();
@@ -582,33 +621,58 @@ void Com_Service_main(void)
         }
 
 
-      }/*  if( AT_Command_Is_New_Command_From_Server() != 0 )  */       
+      }/*  if( AT_Command_Is_New_Command_From_Server() != 0 )  */     
+
+
+
+      /*
+       * Any erros in communication signaled by SIM driver ?
+       */
+      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_ERROR )
+      {
+
+        nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_ERROR;
+
+        eComServiceState = COM_SERVICE_STATE_NO_COM_ERROR;
+
+        #if(COM_SERVICE_DEBUG_ENABLE == 1)
+          Serial.println("[I] State: COM_SERVICE_STATE_NO_COM_ERROR ... No Communication Error ...");
+        #endif
+
+      }
+
+      break;
       
     }/* end case COM_SERVICE_STATE_FULL_COM */
-    break;
 
 
     /*
-     * in this state we just check from time to time if the server connection is still UP
+     * in this state we arrived because an communication error with the GSM provider 
+     *    has been detected by the SIM900 driver. The driver will re-initialize it's internal state machine
+     *    and re-start !!
      *
-     * ... after an IDDLE in communication ...
+     * ... we must wait for the initialization flags to be set by the SIM900 driver.
      */
     case COM_SERVICE_STATE_NO_COM_ERROR:
     {
-      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_NO_ERROR_RECOVERY )
+      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_INIT_FINISH )
       {
-        eComServiceState = COM_SERVICE_STATE_FULL_COM;
+        /* 
+         * re-init Delay counters ... 
+         */
+        nCom_Service_Get_Signal_Strength_Delay = COM_SERVICE_MAX_WAIT_ITTER_SIGNAL_STRENGTH_DELAY;
+        nCom_Service_Delay_Before_Start_Req = COM_SERVICE_MAX_WAIT_ITTER_BEFORE_START_REQ;
+
+        eComServiceState = COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH;
 
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM ... Error recovery ...");
+          Serial.println("[I] State: COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH ... comming from NO comm Error recovery ...");
         #endif
 
       }      
         
-
+      break;
     }
-    break;
-
 
   }/* switch( eComServiceState ) */
 

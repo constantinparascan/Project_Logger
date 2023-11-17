@@ -209,6 +209,57 @@ void Logger_App_pre_init_NvM_link(void)
 
 }
 
+
+
+
+/*
+ * Validate strings !!! They will be used in the URL request to server and must not contain spaces or special chars !!!
+ * 
+ */
+void Logger_App_Fix_NvM_String_Data(unsigned char *strInput, unsigned char nMaxLen)
+{
+  unsigned char nIdx = 0;
+
+  for (nIdx = 0; nIdx < nMaxLen; nIdx ++ )
+  {
+    if( *(strInput + nIdx) == 0x00 )
+      break;
+    else
+      if( ( ( *(strInput + nIdx) >= '0' ) && ( *(strInput + nIdx) <= '9' ) ) || \
+          ( ( *(strInput + nIdx) >= 'a' ) && ( *(strInput + nIdx) <= 'z' ) ) || \
+          ( ( *(strInput + nIdx) >= 'A' ) && ( *(strInput + nIdx) <= 'Z' ) ) )
+          {
+            /* 
+             * valid character ... 
+             */
+          }
+          else
+          {
+            /*
+             * invalid char ... fill with '_'
+             */
+            *(strInput + nIdx) = '_';
+          }
+
+  }/* end for ... */
+
+}
+
+void Logger_App_pre_init_Validate_NvM_String_Data(void)
+{
+  
+  Logger_App_Fix_NvM_String_Data( (unsigned char *)&arrNvM_RAM_Mirror_Str_SimNR   [0], NVM_BLOCK_CHAN_6_DATA_LEN );
+  Logger_App_Fix_NvM_String_Data( (unsigned char *)&arrNvM_RAM_Mirror_Str_Town    [0], NVM_BLOCK_CHAN_7_DATA_LEN );
+  Logger_App_Fix_NvM_String_Data( (unsigned char *)&arrNvM_RAM_Mirror_Str_Place   [0], NVM_BLOCK_CHAN_8_DATA_LEN );
+  Logger_App_Fix_NvM_String_Data( (unsigned char *)&arrNvM_RAM_Mirror_Str_Details [0], NVM_BLOCK_CHAN_9_DATA_LEN );
+  Logger_App_Fix_NvM_String_Data( (unsigned char *)&arrNvM_RAM_Mirror_Str_Device  [0], NVM_BLOCK_CHAN_10_DATA_LEN );
+
+}
+
+
+
+
+
 /*
  * Fill in the NvM blocks with default values 
  *

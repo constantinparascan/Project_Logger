@@ -130,6 +130,8 @@ void init_cyclic_Task_1ms(void)
     NvM_Write_Block(NVM_BLOCK_CHAN_10_ID);
   }
 
+  Logger_App_pre_init_Validate_NvM_String_Data();
+
 }/* init_cyclic_Task_1ms */
 
 

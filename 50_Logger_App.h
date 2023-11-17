@@ -51,6 +51,7 @@ typedef enum TAG_LOGGER_OUTPUT_PIN_STATE
 /* exported API's */
 void Logger_App_pre_init_NvM_link(void);
 void Logger_App_Write_Default_Values_NvM(unsigned char nSlotWrite);
+void Logger_App_pre_init_Validate_NvM_String_Data(void);
 
 void Logger_App_init(void);
 void Logger_App_cyclic_1sec(void);
