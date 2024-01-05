@@ -128,6 +128,7 @@ ISR(USART3_UDRE_vect)
 
     /*
      * [ ----------------------------------------------    ToDo ] ---> OPTIMIZATION !!! Reset reception .... so you won't see the ECHO !!!
+     *                     - shorter string processing means lower execution time !!!     
      *
      */
     
@@ -633,7 +634,8 @@ char * AT_Command_strstr_case_insensitive(const char *str, const char *substring
 
     for ( ; *str != 0; str += 1) 
     {
-        if ( (*str != *b) && ( (*str & 0x1F) != (*b &0x1F) ) )
+        /* check if chars are different, check if Lower 5 bits are the same - in case of upper and lower case litterals */
+        if ( (*str != *b) && ( (*str & 0x1F) != (*b & 0x1F) ) )
         {
             continue;
         }
@@ -646,6 +648,7 @@ char * AT_Command_strstr_case_insensitive(const char *str, const char *substring
                 return (char *) str;
             }
 
+            /* check if chars are different, check if Lower 5 bits are the same - in case of upper and lower case litterals */
             if ( (*a != *b) && ( (*a & 0x1F) != (*b & 0x1F) ) )
             {
                 break;
@@ -1276,14 +1279,6 @@ void AT_Command_Processor_Main(void)
        */      
       AT_Command_Processor_Reset_Reception();
 
-
-//      #if(AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE == 1)
-//        Serial.println("UCSR3B:>");
-//        Serial.print(UCSR3B);
-//        Serial.println();
-//      #endif
-
-
       /* advance state */
 			eAT_Processor_State = AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ_WAIT_TRANSMISSION;
 
@@ -1476,7 +1471,7 @@ void AT_Command_Processor_Main(void)
           {
             /*
              * [ToDo] ... there is no OK and no ERROR ... 
-             * ... we must wait again ... but how manny time we should do this ? 
+             * ... we must wait again ... but how much time we should do this ? 
              *
              *
              */
@@ -1596,6 +1591,14 @@ void AT_Command_Processor_Main(void)
 
       nLastServerResponse_Code = AT_Command_Decode_Rx_Buff_v2();
 
+
+      /*
+       * Reset error counter for communication problems ? <<<<<<<<<<<<<<<<<<<<<<<<<<<<
+       */
+      nAT_ERROR_Limit_Retry_Counter = AT_MAX_ERROR_RETRY_COUNTER;
+
+
+
       /* 
        * 'A' is Alive  -- nothing to execute ...
        *   ... if anything else ... then mark as a new command ... 
@@ -1609,6 +1612,16 @@ void AT_Command_Processor_Main(void)
       break;
 
     }/* AT_STATE_PROCESSOR_SEND_STEP1_PRE_COMMAND_SEQ_DECODE_RESPONSE */
+
+
+
+    /* **********************************************
+     * 
+     *
+     *         RSSI level calculation
+     *
+     *
+     ************************************************ */
 
 
     case AT_STATE_PROCESSOR_SEND_RSSI_LEVEL:
