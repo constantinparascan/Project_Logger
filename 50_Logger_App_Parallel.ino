@@ -4,7 +4,7 @@
  *
  */
 
-
+#include "01_Debug_Utils.h"
 #include "50_Logger_App_Parallel_cfg.h"
 #include "50_Logger_App_Parallel.h"
 #include "03_Com_Service.h"
@@ -132,19 +132,19 @@ void Logger_App_Parallel_init (void)
     nChannelBusyFlag_Old_Status = 1;
 
   #if (LOGGER_APP_PARALLEL_DEBUG_ENABLE >= 1)
-  Serial.begin(9600);
-  Serial.println("[I] Logger Parallel - init");
 
-  Serial.print("CH Values-> CH1: ");
-  Serial.print(arrChannelCredit[ 0 ] );
-  Serial.print(" CH2: ");
-  Serial.print(arrChannelCredit[ 1 ] );
-  Serial.print(" CH3: ");
-  Serial.print(arrChannelCredit[ 2 ] );
-  Serial.print(" CH4: ");
-  Serial.print(arrChannelCredit[ 3 ] );
+    Serial.println("[I] Logger Parallel - init");
 
-  Serial.println();
+    Serial.print("CH Values-> CH1: ");
+    Serial.print(arrChannelCredit[ 0 ] );
+    Serial.print(" CH2: ");
+    Serial.print(arrChannelCredit[ 1 ] );
+    Serial.print(" CH3: ");
+    Serial.print(arrChannelCredit[ 2 ] );
+    Serial.print(" CH4: ");
+    Serial.print(arrChannelCredit[ 3 ] );
+
+    Serial.println();
 
   #endif
     
@@ -379,7 +379,7 @@ void Logger_App_Parallel_main (void)
     nBusyStatus = digitalRead(VENDOR_BUSY);
       
     #if ( LOGGER_APP_PARALLEL_DEBUG_ENABLE >= 3 )
-      Serial.print("[I] - Busy:");
+      Serial.print("[I] Logger Parallel - Busy:");
       Serial.println(nBusyStatus);
     #endif
 
@@ -400,7 +400,7 @@ void Logger_App_Parallel_main (void)
         nChanStatus = Logger_App_Parallel_DigitalRead_Chan( nIdx );
 
         #if ( LOGGER_APP_PARALLEL_DEBUG_ENABLE == 2 )
-          Serial.print("[I] - CH");
+          Serial.print("[I] Logger Parallel - CH");
           Serial.print(nIdx);
           Serial.print(" = ");
           Serial.println(nChanStatus);
@@ -455,7 +455,7 @@ void Logger_App_Parallel_main (void)
             AT_Command_Callback_Request_Bill_Status_Transmission();
 
             #if ( LOGGER_APP_PARALLEL_DEBUG_ENABLE == 1 )
-              Serial.print("[I] - Bill detected - CH:");
+              Serial.print("[I] Logger Parallel - Bill detected - CH:");
               Serial.println(nIdx);
 
               Serial.print("[I] - CH1: ");
@@ -578,7 +578,7 @@ void Logger_App_Parallel_main_v2 (void)
               AT_Command_Callback_Request_Bill_Status_Transmission();
 
               #if ( LOGGER_APP_PARALLEL_DEBUG_ENABLE == 1 )
-                Serial.print("[I] - Bill detected - CH:");
+                Serial.print("[I] Logger Parallel - Bill detected - CH:");
                 Serial.println(nIdx);
 
                 Serial.print("[I] - CH1: ");

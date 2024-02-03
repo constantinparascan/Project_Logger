@@ -7,6 +7,7 @@
  *          waiting delays. Instead an state-machine was done that takes care of this 
  *          needed waiting time-outs.
  */
+#include "01_Debug_Utils.h"
 #include "09_EEPROM_Driver.h"
 
 #define EEPROM_FLAGS_WRITE_REQUEST           (0x80)
@@ -77,7 +78,6 @@ void EEPROM_driver_init(void)
   eEEPROM_State = EEPROM_DRIVER_STATE_IDDLE;
 
   #if(EEPROM_DRIVER_DEBUG_ENABLE == 1)
-  Serial.begin(9600);
   Serial.println("[I] EEPROM driver init ");
   #endif
 
@@ -104,7 +104,7 @@ void EEPROM_driver_main(void)
         #if(EEPROM_DRIVER_DEBUG_ENABLE == 1)
 
           //Serial.println();
-          //Serial.print("FLAGS: ");
+          //Serial.print("[I] EEPROM FLAGS: ");
           //Serial.print(sEEPROM_Internals.nFlags);
 
         #endif
@@ -139,7 +139,7 @@ void EEPROM_driver_main(void)
 
               #if(EEPROM_DRIVER_DEBUG_ENABLE == 1)
                 Serial.println();
-                Serial.print("EEP addr & data: ");
+                Serial.print("[I] EEPROM EEP addr & data: ");
                 Serial.print(sEEPROM_Internals.nWriteAddress);
                 Serial.print(" ");
                 Serial.print(sEEPROM_Internals.arrWriteBuff[ sEEPROM_Internals.nWriteIdx ]);
@@ -421,7 +421,7 @@ void EEPROM_driver_Debug_Write_Pattern_1(void)
 
   if( nStatus == 1 )
   {
-    Serial.println(" Write Accepted ... Pattern 1");
+    Serial.println("[I] EEPROM Write Accepted ... Pattern 1");
   }
 }
 
@@ -436,7 +436,7 @@ void EEPROM_driver_Debug_Write_Pattern_2(void)
 
   if( nStatus == 1 )
   {
-    Serial.println(" Write Accepted ... Pattern 2");
+    Serial.println("[I] EEPROM Write Accepted ... Pattern 2");
   }
 }
 
@@ -450,7 +450,7 @@ void EEPROM_driver_Debug_Read_Pattern(void)
 
   if(nStatus == 1)
   {
-    Serial.println(" Read Accepted ... ");
+    Serial.println("[I] EEPROM Read Accepted ... ");
   }
 }
 
@@ -462,7 +462,7 @@ void EEPROM_driver_Debug_Print_Read_Pattern(void)
   {
     EEPROM_driver_Get_Read_Buffer_Content(arr_readout, 32);
 
-    Serial.println("EEPROM Data: ");
+    Serial.println("[I] EEPROM Data: ");
     for(nIdx = 0; nIdx < 32; nIdx ++)
     {
       Serial.print(arr_readout[nIdx]);

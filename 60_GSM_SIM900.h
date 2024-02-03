@@ -5,7 +5,7 @@
  * 0 - disable serial debugging
  * 1 - enable serial  debugging 
  */ 
-#define AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE (1)
+#define AT_COMMAND_PROCESSOR_GSM_SIM900_DEBUG_SERIAL_ENABLE (0)
 
 
 typedef enum T_GSM_SIM900_STATE_TAG
@@ -15,6 +15,7 @@ typedef enum T_GSM_SIM900_STATE_TAG
   AT_STATE_INIT_POWER_ON_WAIT_STARTUP,
   AT_STATE_INIT_RESET,
   AT_STATE_INIT_RESET_WAIT_STARTUP,
+  AT_STATE_INIT_AFTER_RESET_DELAY,
   AT_STATE_INIT_SEQ_SEND_COMMAND,
   AT_STATE_INIT_SEQ_SEND_COMMAND_WAIT_TRANSMISSION,
   AT_STATE_INIT_SEQ_WAIT_RESPONSE,
@@ -55,5 +56,7 @@ unsigned char* AT_Command_Get_Data_From_Last_Command_From_Server(void);
  *  Callback functions
  */
   void AT_Command_Callback_Notify_Init_Finished(void);
+  unsigned char AT_Command_Processor_Is_Iddle(void);
+  void AT_Command_Request_Reset_SIM(void);
 
 #endif /* __GSM_SIM900_H__ */

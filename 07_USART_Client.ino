@@ -20,6 +20,10 @@ static unsigned char nUSART_Tx_Idx = 0;
 static unsigned char nUSART_Tx_TransmissionRequest = 0;
 static unsigned char nUSART_Tx_TransmissionLength = 0;
 
+
+/* Communication Interrupts are available only if no Debugging and Initialization active */
+#if ( BOARD_DIAGNOSTIC_AND_INITIALIZATION_ENABLE == 0 )
+
 /* USART RX ISR
  * v0.1
  *    - if a new byte is received from USART ... then we move-it in the RX buffer and we 
@@ -39,6 +43,8 @@ ISR(USART1_RX_vect)
 
   nNewDataFlag = 1;
 }
+
+#endif /* ( BOARD_DIAGNOSTIC_AND_INITIALIZATION_ENABLE == 0 ) */
 
 
 /* Init function of the USART driver

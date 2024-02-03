@@ -36,8 +36,8 @@ typedef enum TAG_ComService_State
  * Exported API's
  */
 void Com_Service_Init(void);
-void Com_Service_main_Eth(void);
-void Com_Service_main_AT(void);
+void Com_Service_main(void);
+
 
 unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission(unsigned char nType);
 unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v2(unsigned short nChan1, unsigned short nChan2, \
@@ -56,5 +56,6 @@ void AT_Command_Callback_Notify_Init_Finished(void);
 void AT_Command_Callback_Request_Bill_Status_Transmission(void);
 void AT_Command_Callback_Request_ERROR_Status_Transmission(void);
 void AT_Command_Callback_Notify_No_Communication_Error_Re_Init(void);
+void AT_Command_Callback_Notify_Server_Response_Received(void);
 
 #endif /* __COM_SERVICE_H__ */

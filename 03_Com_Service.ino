@@ -32,12 +32,11 @@
  * - Communication between application layer and current COM layer is done via "callback" functions specified below. They act on "nCallbackFlags" 
  *            handeled by the main function that are performing various communication actions.
  */
-
+#include "01_Debug_Utils.h"
 #include "03_Com_Service.h"
 #include "03_Com_Service_cfg.h"
 #include "99_Automat_Board_cfg.h"
 #include "99_Automat_Board_Config.h"
-#include "05_Eth_Service_Client.h"
 #include "60_GSM_SIM900.h"
 
 #include "50_Logger_App_Parallel.h"
@@ -51,6 +50,7 @@
 #define COM_SERV_CONN_STAT_ONLINE_FREE (250)
 #define COM_SERV_CONN_STAT_ONLINE_BUSY (255)
 
+#define COM_SERV_COM_MESSAGE_MONITORING_DEADLINE_TIMER   (3000)    /* 3000 * 5ms = 15 sec */
 
 /*
  *  Internal management 
@@ -81,7 +81,9 @@ T_ComService_Internals sComServiceInternals;
  *  Appl Logger specific flags
  *
  */
-unsigned char nFlags_Com_Service_StartupMessageTransmitted = 0;
+unsigned char  nFlags_Com_Service_StartupMessageTransmitted = 0;
+unsigned short nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer = COM_SERV_COM_MESSAGE_MONITORING_DEADLINE_TIMER;
+unsigned char  nFlags_Com_Service_ComMonitoring_Active = 0;
 
 /*
  * Appl Logger specific delays
@@ -104,11 +106,6 @@ unsigned char  nCom_HW_Config_TYPE_Local = 0;
 /*
  * Private API's
  */
-unsigned char Com_Service_Process_Server_Responses(void);
-void Com_Service_Build_Server_Req_Bill_Payment_Generic( unsigned char nFrameType );
-
-unsigned char Com_Service_Process_Server_Response_Service_Availability_ETH(void);
-void Com_Service_Build_Server_Request_Service_Availability_ETH(void);
 
 
 /*
@@ -116,11 +113,12 @@ void Com_Service_Build_Server_Request_Service_Availability_ETH(void);
  *
  */
 #define COM_FLAGS_CALLBACK_AT_INIT_FINISH             (0x01)
-#define COM_FLAGS_CALLBACK_AT_COM_ERROR               (0x02)
+#define COM_FLAGS_CALLBACK_AT_COM_ERROR_REINIT        (0x02)
 #define COM_FLAGS_CALLBACK_AT_COM_NO_ERROR_RECOVERY   (0x04)
 
-#define COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL (0x10)
-#define COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME (0x20)
+#define COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL     (0x10)
+#define COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME     (0x20)
+#define COM_FLAGS_CALLBACK_AT_COM_SERVER_RESPONSE_RECEIVED (0x80)
 
 unsigned char nCallbackFlags = 0x00;
 
@@ -131,6 +129,10 @@ unsigned char nCallbackFlags = 0x00;
 void AT_Command_Callback_Notify_Init_Finished(void)
 {
   nCallbackFlags |= COM_FLAGS_CALLBACK_AT_INIT_FINISH;
+
+
+  /* reset any previous error flags ... */
+  nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_ERROR_REINIT;
 }
 
 
@@ -157,8 +159,14 @@ void AT_Command_Callback_Request_ERROR_Status_Transmission(void)
  */
 void AT_Command_Callback_Notify_No_Communication_Error_Re_Init(void)
 {
-  nCallbackFlags |= COM_FLAGS_CALLBACK_AT_COM_ERROR;
+  nCallbackFlags |= COM_FLAGS_CALLBACK_AT_COM_ERROR_REINIT;
 }
+
+void AT_Command_Callback_Notify_Server_Response_Received(void)
+{
+  nCallbackFlags |= COM_FLAGS_CALLBACK_AT_COM_SERVER_RESPONSE_RECEIVED;
+}
+
 
 /* V0.1
  *
@@ -168,8 +176,7 @@ void AT_Command_Callback_Notify_No_Communication_Error_Re_Init(void)
 void Com_Service_Init(void)
 {
   #if(COM_SERVICE_DEBUG_ENABLE == 1)
-    Serial.begin(9600);
-    Serial.println("[I] Com Serv Debug ...");
+    Serial.println("[I] Com_Serv Debug ...");
   #endif
 
   /* startup state ... */
@@ -178,7 +185,7 @@ void Com_Service_Init(void)
   /* initialize Ethernet module communication ... */
   if( COM_SERVICE_COMMUNICATION_MODE & COM_MODE_ETH )
   {
-    Eth_Service_Client_init();
+    /* Eth_Service_Client_init(); */
   }
 
   /* initialize SIMx00 module communication ... */
@@ -204,6 +211,9 @@ void Com_Service_Init(void)
     */
    nCom_Service_Get_Signal_Strength_Delay = COM_SERVICE_MAX_WAIT_ITTER_SIGNAL_STRENGTH_DELAY;
    nCom_Service_Delay_Before_Start_Req = COM_SERVICE_MAX_WAIT_ITTER_BEFORE_START_REQ;
+
+   nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer = COM_SERV_COM_MESSAGE_MONITORING_DEADLINE_TIMER;
+   nFlags_Com_Service_ComMonitoring_Active = 0;
 
 }/* end function Com_Service_Init */
 
@@ -237,7 +247,7 @@ void Com_Service_main(void)
        eComServiceState = COM_SERVICE_STATE_QUERY_SERVER;
 
       #if(COM_SERVICE_DEBUG_ENABLE == 1)
-        Serial.println("[I] State: COM_SERVICE_STATE_QUERY_SERVER ...");
+        Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_QUERY_SERVER ...");
       #endif       
     }    
     break;
@@ -259,7 +269,7 @@ void Com_Service_main(void)
          */
 
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP ...");
+          Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH ...");
         #endif
 
         /* reset init state flag ... */
@@ -285,6 +295,10 @@ void Com_Service_main(void)
       else
       {
         eComServiceState = COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH_WAIT;
+
+        #if(COM_SERVICE_DEBUG_ENABLE == 1)
+          Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH_WAIT ...");
+        #endif
       }
 
       break;
@@ -306,9 +320,24 @@ void Com_Service_main(void)
          * if previously a "start" message has been transmitted ... don't repeat transmission !
          */
         if( nFlags_Com_Service_StartupMessageTransmitted > 0)
+        {
           eComServiceState = COM_SERVICE_STATE_FULL_COM;
+
+          /* reset message response monitoring --- no message to be monitored yet ...  */
+          nFlags_Com_Service_ComMonitoring_Active = 0;
+
+          #if(COM_SERVICE_DEBUG_ENABLE == 1)
+            Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_FULL_COM ...");
+          #endif
+        }
         else
+        {
           eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP;
+
+          #if(COM_SERVICE_DEBUG_ENABLE == 1)
+            Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP ...");
+          #endif
+        }
       }
 
       break;
@@ -349,7 +378,7 @@ void Com_Service_main(void)
         eComServiceState = COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT;
 
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: Sent START command ... goto COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT ...");
+          Serial.println("[I] Com_Serv State: Sent START command ... goto COM_SERVICE_STATE_CONNECTED_TO_SERVER_STARTUP_WAIT ...");
         #endif
 
         /*
@@ -376,8 +405,11 @@ void Com_Service_main(void)
       {      
         eComServiceState = COM_SERVICE_STATE_FULL_COM;
 
+        /* reset message response monitoring --- no message to be monitored yet ...  */
+        nFlags_Com_Service_ComMonitoring_Active = 0;
+
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM ...");
+          Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_FULL_COM ...");
         #endif
       }
 
@@ -398,6 +430,54 @@ void Com_Service_main(void)
 
     case COM_SERVICE_STATE_FULL_COM:
     {
+
+      /*
+       * Message monitoring error handling ...
+       */
+      if( nFlags_Com_Service_ComMonitoring_Active > 0 )
+      {
+        /*
+         * there has been a response for the previous transmitterd message ? !
+         */
+        if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_SERVER_RESPONSE_RECEIVED ) 
+        {
+          nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_SERVER_RESPONSE_RECEIVED;
+
+          nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer = COM_SERV_COM_MESSAGE_MONITORING_DEADLINE_TIMER;
+
+          /* stop the monitoring ... monitored message has been received ... */
+          nFlags_Com_Service_ComMonitoring_Active = 0;
+        }
+        else
+        {
+          if( nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer > 0 ) 
+          {
+            nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer --;
+          }
+
+
+          /* deadline monitoring has detected an error in communication ... messages not responded by the server !!!! */
+          if( nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer == 0 )
+          {
+            /* !!!! ERROR !!!! ... restart of communication required !!! */
+
+            AT_Command_Request_Reset_SIM();
+
+            /* after reset ... stop the monitorig until restart ... */
+            nFlags_Com_Service_ComMonitoring_Active = 0;
+            nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer = COM_SERV_COM_MESSAGE_MONITORING_DEADLINE_TIMER;
+
+            #if(COM_SERVICE_DEBUG_ENABLE == 1)
+              Serial.println("[I] Com_Serv ERROR message Monitoring !!!! --> Request SIM900 RESET !!!! ");
+            #endif
+
+          }/* end if( nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer == 0 ) */
+
+        }/* end else if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_SERVER_RESPONSE_RECEIVED ) */
+
+      }/* if( nFlags_Com_Service_ComMonitoring_Active > 0 ) */
+
+
 
 
       /* *********************************
@@ -435,9 +515,16 @@ void Com_Service_main(void)
         {
 
           nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_DATA_NORMAL;
+          nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_SERVER_RESPONSE_RECEIVED;
+
+          /*
+          * restart response monitoring timer ... 
+          */
+          nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer = COM_SERV_COM_MESSAGE_MONITORING_DEADLINE_TIMER;
+          nFlags_Com_Service_ComMonitoring_Active ++;
 
           #if(COM_SERVICE_DEBUG_ENABLE == 1)
-            Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM --> Send DATA Req ");
+            Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_FULL_COM --> Send DATA Req ");
           #endif
 
         }
@@ -476,9 +563,17 @@ void Com_Service_main(void)
           {
 
             nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_TRANSMIT_ERROR_FRAME;
+            nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_SERVER_RESPONSE_RECEIVED;
+
+            /*
+            * restart response monitoring timer ... 
+            */
+            nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer = COM_SERV_COM_MESSAGE_MONITORING_DEADLINE_TIMER;
+            nFlags_Com_Service_ComMonitoring_Active ++;
+
 
             #if(COM_SERVICE_DEBUG_ENABLE == 1)
-              Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM --> Send ERROR Req ");
+              Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_FULL_COM --> Send ERROR Req ");
             #endif
 
           }
@@ -526,16 +621,26 @@ void Com_Service_main(void)
         {
           /*
            * Reset PING delay ...
-           */
-          
+           */         
           nCom_Service_PingToServer_Delay = LOG_APP_PING_TO_SERVER_DELAY;
+
+
+          /* reset previous monitoring flag result ... */
+          nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_SERVER_RESPONSE_RECEIVED;
+
+          /*
+          * restart response monitoring timer ... 
+          */
+          nFlags_Com_Service_ComMonitoring_MessageTx_DeadlineTimer = COM_SERV_COM_MESSAGE_MONITORING_DEADLINE_TIMER;
+          nFlags_Com_Service_ComMonitoring_Active ++;
 
         }
 
 
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM --> Send PING Req ");
+          Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_FULL_COM --> Send PING Req ");
         #endif
+
 
       }/* End PING !!  */
 
@@ -616,7 +721,7 @@ void Com_Service_main(void)
           AT_Command_Process_Command_From_Server();
 
           #if(COM_SERVICE_DEBUG_ENABLE == 1)
-            Serial.println("[I] State: COM_SERVICE_STATE_FULL_COM --> RESPONSE RESET MONETARY COMMAND ! ");
+            Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_FULL_COM --> RESPONSE Acknowledge for server COMMAND ! ");
           #endif
         }
 
@@ -625,18 +730,19 @@ void Com_Service_main(void)
 
 
 
+
       /*
        * Any erros in communication signaled by SIM driver ?
        */
-      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_ERROR )
+      if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_COM_ERROR_REINIT )
       {
 
-        nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_ERROR;
+        nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_COM_ERROR_REINIT;
 
         eComServiceState = COM_SERVICE_STATE_NO_COM_ERROR;
 
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: COM_SERVICE_STATE_NO_COM_ERROR ... No Communication Error ...");
+          Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_NO_COM_ERROR ... No Communication Error ...");
         #endif
 
       }
@@ -655,8 +761,16 @@ void Com_Service_main(void)
      */
     case COM_SERVICE_STATE_NO_COM_ERROR:
     {
+
+      /*
+       * wait in this state until SIM900 is fully initialized !!!
+       */
       if( nCallbackFlags & COM_FLAGS_CALLBACK_AT_INIT_FINISH )
       {
+
+        /* reset init state flag ... */
+        nCallbackFlags &= ~COM_FLAGS_CALLBACK_AT_INIT_FINISH;
+
         /* 
          * re-init Delay counters ... 
          */
@@ -666,7 +780,7 @@ void Com_Service_main(void)
         eComServiceState = COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH;
 
         #if(COM_SERVICE_DEBUG_ENABLE == 1)
-          Serial.println("[I] State: COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH ... comming from NO comm Error recovery ...");
+          Serial.println("[I] Com_Serv State: COM_SERVICE_STATE_CHECK_SIGNAL_STRENGTH ... comming from NO comm Error recovery ...");
         #endif
 
       }      
@@ -727,7 +841,7 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
 
   #if(COM_SERVICE_DEBUG_ENABLE == 1)
     Serial.println();
-    Serial.print("[I] Com send-> ");
+    Serial.print("[I] Com_Serv Com send-> ");
     Serial.println(arrLocalBuff);
   #endif
 
@@ -868,7 +982,7 @@ unsigned char Com_Service_Client_Request_BillPayment_Generic_Transmission_Bill_v
 
   #if(COM_SERVICE_DEBUG_ENABLE == 1)
     Serial.println();
-    Serial.print("[I] Com send-> ");
+    Serial.print("[I] Com_Serv Com send-> ");
     Serial.println(arrLocalBuff);
   #endif
 
@@ -915,313 +1029,6 @@ unsigned char Com_Service_Client_Is_Comm_Free(void)
 }
 
 
-
-/* Message format CLIENT to SERVER    - send a generic request to server in order to check service availability 
- *
- *   - "/gsm/index.php"
- */
-void Com_Service_Build_Server_Request_Service_Availability_ETH(void)
-{
-   /*
-   * Example of a request:
-   *
-   * http://145.239.84.165:35269/gsm/index.php
-   */
-
-
-  Eth_Service_Client_ClearTxBuff();
-  Eth_Service_Client_AddTxData( "GET " SERVER_ADDRESS_GET_URL_AVAILABILITY ); 
-
-  Eth_Service_Client_AddTxData( " HTTP/1.1");
-
-  Eth_Service_Client_SendRequest(); 
-}
-
-/*
- * Server response should contain at least 51 alfa numeric characters ... 
- *
- *  [ToDo] ... search should stop if a "\0" char is reached ... 
- */
-unsigned char Com_Service_Process_Server_Response_Service_Availability_ETH(void)
-{
-  unsigned char nReturn = 0;
-
-  char *ServerRespData = NULL;
-  unsigned short nBufferLen = 0;
-  unsigned short nCharsCount = 0;
-  unsigned short nIdx = 0;
-
-
-  nBufferLen = Eth_Service_Client_Get_RxBuffer(&ServerRespData);
-
-  //#if(LOGGER_APP_DEBUG_SERIAL == 1)
-  //  Serial.print("Server:  ");
-  //  Serial.write(ServerRespData, nBufferLen);
-  //  Serial.println();    
-  //#endif
-
-  for(nIdx = 0; nIdx < nBufferLen; nIdx ++)  
-  {
-    if( ( ServerRespData[nIdx] >= 32 )  && ( ServerRespData[nIdx] <= 126 ) )   /* al numeric and alfa-numeric chars ... from ascii table .. */
-    {
-      nCharsCount ++;
-    }
-
-    if(ServerRespData[nIdx] == '\0')
-      break;
-  }
-  
-  if(nCharsCount > 50)
-  {
-    nReturn = 1;
-  }
-  else
-  {
-    nReturn = 0;
-  }
-
-
-  return nReturn;
-}
-
-
-
-
-
-
-
-/* Message format CLIENT to SERVER    - Generic message format, no error client to server ... 
- *
- *   - formats message to be sent to server containing channel values
- *   - sends last validated bill value
- *   - user can select different types of frames ...  
- */
-void Com_Service_Build_Server_Req_Bill_Payment_Generic( unsigned char nFrameType )
-{
-  char arrDummy[50];
-
-
-  /*
-   * Example of a request:
-   *
-   * http://192.168.0.109/entry.php?x=862462030142276;1111111111111111111;0726734732;RDS;0;0;0;0;P;0;0;No_approver;IASI;PALAS_IASI;PALAS_PARTER;NV9;1
-   * 
-   * new value:
-   *   http://145.239.84.165:35269/gsm/entry_new.php?x=862462030142276;1111111111111111111;0726734731;RDS;0;0;0;0;P;0;0;No_approver;IASI;PALAS_IASI;PALAS_PARTER;NV9;1
-   */
-
-
-  Eth_Service_Client_ClearTxBuff();
-
-  //Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");
-  //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");
-  //----------------------------------------- Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");    /* PRODUCTION address ... !!!  */
-  Eth_Service_Client_AddTxData( "GET " SERVER_ADDRESS_GET_URL_COMMAND_X );
-  //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");      /* LOCAL Tests ! address  !!!  */
-
-  Eth_Service_Client_AddTxData( LOG_APP_IMEI_CARD ";");
-  Eth_Service_Client_AddTxData( LOG_APP_SIM_SN ";");
-  Eth_Service_Client_AddTxData( LOG_APP_SIM_PHONE_NR ";");
-  Eth_Service_Client_AddTxData( LOG_APP_SIM_OPERATOR ";");
-
-
-  /* 
-   * Add Bills channel 1
-   * Add Bills channel 2
-   * Add Bills channel 3
-   * Add Bills channel 4
-   * Add type of event
-   */ 
-
-  snprintf(arrDummy, 50,"%d;%d;%d;%d;", Logger_App_GetChannelValue(1), Logger_App_GetChannelValue(2), Logger_App_GetChannelValue(3), Logger_App_GetChannelValue(4));
-  Eth_Service_Client_AddTxData(arrDummy);   
-
-  /*   - 1 byte
-                                                   1 = bill of type 1 validated
-                                                   2 = bill of type 2 validated
-                                                   3 = bill of type 3 validated
-                                                   4 = bill of type 4 validated
-                                                   S = Start dupa o pana de curent
-                                                   A = Confirmare reset monetar
-                                                   B = blocat
-                                                   P = ping
-                                                   O = usa aparatului deschisa
-                                                   C = usa aparatului inchisa
-                                                   E = error
-        - 1 byte   
-                                Type of error 0 .. 20
-
-        - 1 byte
-                                1 = reset monetar
-      
-  */ 
-
-  switch(nFrameType)
-  {
-    /*
-     * display last bill type ... no errors
-     */
-    case 0:
-    {
-      snprintf( arrDummy, 50,"%d;0;0;", Logger_App_Get_LastBillType() );
-    }
-    break;
-
-    /*
-     * ping ... 
-     */
-    case 'P':
-    {
-      snprintf(arrDummy, 50,"P;0;0;");
-    }
-    break;
-
-    case 'A':
-    {
-      /* values of nCH1_old, .... already reset previously .... */
-      snprintf(arrDummy, 50,"A;0;1;");
-    }   
-    break;
-
-    case 'S':
-    {
-      /* values of nCH1_old, .... already reset previously .... */
-      snprintf(arrDummy, 50,"S;0;0;");
-    }   
-    break;
-
-    /*
-     * Error frame 
-     */
-    case 'E':
-    {
-      snprintf(arrDummy, 50,"E;%d;0;", Logger_App_Get_LastErrorValue() );
-    }
-    break;       
-  }
-
-  Eth_Service_Client_AddTxData(arrDummy);
-
-
-  
-
-  #if(LOGGER_APP_DEBUG_SERIAL == 1)
-    Serial.println("----------------------------");
-    Serial.println(arrDummy);
-    Serial.println("----------------------------");  
-  #endif
-
-
-  Eth_Service_Client_AddTxData( LOG_APP_VERSION_MAJOR ";");
-  Eth_Service_Client_AddTxData( LOG_APP_TOWN ";");
-  Eth_Service_Client_AddTxData( LOG_APP_PLACE ";");
-  Eth_Service_Client_AddTxData( LOG_APP_DETAILS ";");
-  Eth_Service_Client_AddTxData( LOG_APP_DEVICE_TYPE ";");
-  Eth_Service_Client_AddTxData( LOG_APP_DEFAULT_RSSI);
-
-  Eth_Service_Client_AddTxData( " HTTP/1.1");
-
-  /* [ToDo] ... check the return status !!!  */  
-
-  //Eth_Service_Client_StackBuffRequest();
-
-  Eth_Service_Client_SendRequest(); 
-
-
-   /*
-   * Change State
-   */
-  
-}
-
-
-/* [ToDo] --- this function should be able to stack up to 10 commands ... in case you shuld process them later
- *    
- *
- */
-
-unsigned char Com_Service_Process_Server_Responses(void)
-{
-  unsigned char nReturn = 0;
-
-  char *ServerRespData = NULL;
-  unsigned short nBufferLen = 0;
-  unsigned short nIdx = 0;
-
-
-  nBufferLen = Eth_Service_Client_Get_RxBuffer(&ServerRespData);
-
-  #if(LOGGER_APP_DEBUG_SERIAL == 1)
-    //Serial.print("Server:  ");
-    //Serial.write(ServerRespData, nBufferLen);
-    //Serial.println();    
-  #endif
-
-
-  for(nIdx = 0; nIdx < nBufferLen; nIdx ++)  
-  {
-    //Serial.write(ServerRespData[nIdx]);
-    
-    /*
-     *   ... look inside the receive buffer 
-     *   ... if null char or "*" then ... stop
-     *
-     *     [ToDo] .... !!!!!! make sure that we should stop also on NULL char !!!!
-     */
-    if( (ServerRespData[nIdx] == 0) || (ServerRespData[nIdx] == '*'))
-      break;
-
-
-    /* the message is not at the end of the buffer
-    */
-    if(nIdx < (nBufferLen - 5))
-    {
-      if( (ServerRespData[nIdx] == 'C') && (ServerRespData[nIdx + 1] == 'M') && (ServerRespData[nIdx + 2] == 'D') )
-      {
-        /* 
-         * Normal Alive response ...           CMDA 
-         */
-        if( ServerRespData[nIdx + 3] == 'A') 
-        {
-          nReturn = 1;
-
-          #if(LOGGER_APP_DEBUG_SERIAL == 1)
-            Serial.println("Server response --> CMDA ");
-          #endif
-
-          /* no command */
-          sComServiceInternals.nCom_Service_Response_Command_Type = 0;          
-
-          break;
-        }
-
-        /*
-         * reset cash request from server ....    CMDB
-         */
-        if( ServerRespData[nIdx + 3] == 'B') 
-        {
-          nReturn = 1;
-
-          #if(LOGGER_APP_DEBUG_SERIAL == 1)
-            Serial.println("Server response --> CMDB ");
-          #endif
-
-          /* reset command received ... */
-          sComServiceInternals.nCom_Service_Response_Command_Type = 'B';
-
-          break;
-        }
-
-      }/* if( (ServerRespData[nIdx] == 'C') && (ServerRespData[nIdx + 1] == 'M') && (ServerRespData[nIdx + 2] == 'D') ) */
-
-    }/* if(nIdx < (nBufferLen - 5)) */
-
-  }/* for(nIdx = 0; nIdx < nBufferLen; nIdx ++)   */
-
-  return nReturn;
-}
-
-
 /*
  * Used to count the "LOG_APP_PING_TO_SERVER_DELAY" - time until the cash machine sends an alive PING 
  *     message to server !
@@ -1235,6 +1042,12 @@ void Com_Service_cyclic_1sec(void)
   {
     nCom_Service_PingToServer_Delay --;
   }
+
+  #if(COM_SERVICE_DEBUG_ENABLE == 1)
+    Serial.print("[I] Com_Serv Ping Counter: ");
+    Serial.println(nCom_Service_PingToServer_Delay);
+  #endif
+
 
 }
 

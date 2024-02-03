@@ -4,9 +4,10 @@
 
               v1.0 - 22.02.2023 - optimization, completion of reset bill, power on notification, PING
 */
-#include <string.h> /* used for memcpy and strcmp definition */
+#include "01_Debug_Utils.h"
 #include "54_tool_NV9plus_Utils.h"
-#include <Arduino.h>
+#include <string.h>                   /* used for memcpy and strcmp definition */
+//#include <Arduino.h>
 
 
 /* local stored values of response produced by a command "159" (0x9F)*/
@@ -36,7 +37,7 @@ void tool_NV9plus_utils_init(void)
 
 
     #if(TOOL_NV9PLUS_UTILS_SERIAL_DEBUG == 1)
-    Serial.begin(9600);
+    // Serial.begin(9600);
     //printf("\ntool_NV9plus_utils_init  ... ");
     #endif
 

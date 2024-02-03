@@ -12,13 +12,8 @@
 
 #define MAX_BEFORE_POWER_ON_DELAY           (100)
 #define MAX_RESET_LINE_HIGH_LEVEL_DELAY     (700)
+#define MAX_AFTER_RESET_TIME_DELAY          (700)
 #define MAX_POWER_ON_LINE_HIGH_LEVEL_DELAY  (700)
-
-
-/*
- * Use USART 1 .. .for communication with GSM module
- */
-#define AT_USE_SERIAL_PORT (3)
 
 
 #define AT_SERIAL_COM_SPEED (115200)

@@ -9,6 +9,7 @@
 #include <EEPROM.h>
 #endif
 
+#include "01_Debug_Utils.h"
 #include "09_NvM_Manager.h"
 #include "09_NvM_Manager_cfg.h"
 #include "09_EEPROM_Driver.h"
@@ -108,8 +109,8 @@ void NvM_Init(void)
   unsigned char nEEPROM_Data;
 
   #if(NVM_MANAGER_DEBUG_SERIAL == 1)
-  Serial.begin(9600);
-  Serial.println("[NVM] Debug Startup ...");
+
+  Serial.println("[I] NVM Debug Startup ...");
 
   unsigned long int nTestData = 0xAABBCCDD;
 
@@ -152,7 +153,7 @@ void NvM_Init(void)
 
 
       #if(NVM_MANAGER_DEBUG_SERIAL == 1)
-        Serial.println("---------------------------");
+        Serial.println("[I] NVM ---------------------------");
       #endif
 
 
@@ -176,7 +177,7 @@ void NvM_Init(void)
         
          #if(NVM_MANAGER_DEBUG_SERIAL == 1)
             Serial.println();
-            Serial.print("[NVM] Info - pattern readout: ");            
+            Serial.print("[I] NVM Info - pattern readout: ");            
             Serial.print(nEEPROM_Data, HEX);
           #endif /* NVM_MANAGER_DEBUG_SERIAL */
            
@@ -191,7 +192,7 @@ void NvM_Init(void)
 
           #if(NVM_MANAGER_DEBUG_SERIAL == 1)
             Serial.println();
-            Serial.print("[NVM] Info - Block on Init VALID: ID ");
+            Serial.print("[I] NVM Info - Block on Init VALID: ID ");
             snprintf(NvM_DebugPrintBuff, 30, "%d  EEPROM_Addr = %d, ", nIdx, arrNvM_BlockDef[nIdx].AddressLastEntry, arrNvM_BlockDef[nIdx].DataPtr );
             Serial.println(NvM_DebugPrintBuff);
           #endif /* NVM_MANAGER_DEBUG_SERIAL */
@@ -210,7 +211,7 @@ void NvM_Init(void)
 
         #if(NVM_MANAGER_DEBUG_SERIAL == 1)
           Serial.println();
-          Serial.print("[NVM] Info - Block on Init NULL: ID ");
+          Serial.print("[I] NVM Info - Block on Init NULL: ID ");
           snprintf(NvM_DebugPrintBuff, 30, "%d EEPROM_Addr= %d, %X", nIdx, arrNvM_BlockDef[nIdx].AddressLastEntry, arrNvM_BlockDef[nIdx].DataPtr );
           Serial.println(NvM_DebugPrintBuff);
         #endif /* NVM_MANAGER_DEBUG_SERIAL */
@@ -280,7 +281,7 @@ void NvM_ReadAll(void)
 
         #if(NVM_MANAGER_DEBUG_SERIAL == 1)
           Serial.println();
-          Serial.print(" [NVM] Info - Block Readed: ID");
+          Serial.print("[I] NVM Info - Block Readed: ID");
           snprintf(NvM_DebugPrintBuff, 30, " %d EEPROM_Addr: %d ", nIdx, arrNvM_BlockDef[nIdx].AddressLastEntry);
           Serial.println(NvM_DebugPrintBuff);
         #endif /* NVM_MANAGER_DEBUG_SERIAL */
@@ -290,7 +291,7 @@ void NvM_ReadAll(void)
       {
         #if(NVM_MANAGER_DEBUG_SERIAL == 1)
           Serial.println();
-          Serial.print(" [NVM] Info - Block Read NOK - NULL dataPtr: ID");
+          Serial.print("[I] NVM Info - Block Read NOK - NULL dataPtr: ID");
           snprintf(NvM_DebugPrintBuff, 30, " %d ", nIdx);
           Serial.println(NvM_DebugPrintBuff);
         #endif /* NVM_MANAGER_DEBUG_SERIAL */
@@ -415,7 +416,7 @@ void NvM_Main(void)
 
           #if(NVM_MANAGER_DEBUG_SERIAL == 1)
             Serial.println();
-            Serial.print(" [NVM] Info - WRITE -prep: ID");
+            Serial.print("[I] NVM Info - WRITE -prep: ID");
             snprintf(NvM_DebugPrintBuff, 30, " %d on EEPROM_Addr %d ", nIdx, nNvM_Write_EEPROM_Address);
             Serial.println(NvM_DebugPrintBuff);
           #endif /* NVM_MANAGER_DEBUG_SERIAL */
@@ -452,7 +453,7 @@ void NvM_Main(void)
 
             #if(NVM_MANAGER_DEBUG_SERIAL == 1)
               Serial.println();
-              Serial.print(" [NVM] Info - READ -prep: ID");
+              Serial.print("[I] NVM Info - READ -prep: ID");
               snprintf(NvM_DebugPrintBuff, 30, " %d on EEPROM_Addr %d ", nIdx, arrNvM_BlockDef[nIdx].AddressLastEntry);
               Serial.println(NvM_DebugPrintBuff);
             #endif /* NVM_MANAGER_DEBUG_SERIAL */
@@ -498,7 +499,7 @@ void NvM_Main(void)
 
             #if(NVM_MANAGER_DEBUG_SERIAL == 1)
               Serial.println();
-              Serial.print(" [NVM] Request EEPROM to Write: ");
+              Serial.print("[I] NVM Request EEPROM to Write: ");
               for(nIdx = 0; nIdx < nNvM_DataBytesToBeWritten; nIdx ++)
               {
                 snprintf(NvM_DebugPrintBuff, 30, " %d ", ptrNvM_RAM_Mirror[nIdx]);
@@ -699,7 +700,7 @@ void NvM_Main(void)
 
         #if(NVM_MANAGER_DEBUG_SERIAL == 1)
           Serial.println();
-          Serial.print(" [NVM] Info - WRITE -done: ID");
+          Serial.print("[I] NVM Info - WRITE -done: ID");
           snprintf(NvM_DebugPrintBuff, 30, " %d on EEPROM_Addr %d ", nNvM_WorkingBlockID, arrNvM_BlockDef[nNvM_WorkingBlockID].AddressLastEntry);
           Serial.println(NvM_DebugPrintBuff);
         #endif /* NVM_MANAGER_DEBUG_SERIAL */
@@ -830,7 +831,7 @@ void NvM_Main(void)
 
         #if(NVM_MANAGER_DEBUG_SERIAL == 1)
           Serial.println();
-          Serial.print(" [NVM] Info - READ -done: ID");
+          Serial.print("[I] NVM Info - READ -done: ID");
           snprintf(NvM_DebugPrintBuff, 30, " %d on EEPROM_Addr %d ", nNvM_WorkingBlockID, arrNvM_BlockDef[nNvM_WorkingBlockID].AddressLastEntry);
           Serial.println(NvM_DebugPrintBuff);
         #endif /* NVM_MANAGER_DEBUG_SERIAL */
@@ -942,7 +943,7 @@ void NvM_Print_Memory_Range(unsigned int nAddrStart, unsigned int nAddrEnd, unsi
   unsigned int nIdx = 0;
   unsigned int nLocalCoutDisp = nCountDisp;
 
-  Serial.println(" EEPROM DUMP: ");
+  Serial.println("[I] NVM EEPROM DUMP: ");
   snprintf(NvM_DebugPrintBuff, 30, " [dec]%5d [hex]%04X :", nAddrStart, nAddrStart);
   Serial.print(NvM_DebugPrintBuff);
 

@@ -71,7 +71,7 @@ unsigned char Logger_App_DetectConfiguration (void)
   int nReadOut = 0;
 
   #if(AUTOMAT_BOARD_CONFIG_DEBUG_ENABLE >= 1)
-    Serial.begin(9600);
+    //Serial.begin(9600);
   #endif
 
   pinMode(BOARD_TYPE_CONFIG_PIN_CONFIG_1,   INPUT_PULLUP);
@@ -134,3 +134,39 @@ unsigned char Logger_App_DetectConfiguration (void)
 
 }/* end function Logger_App_DetectConfiguration */
 
+
+
+#if ( BOARD_DIAGNOSTIC_AND_INITIALIZATION_ENABLE == 1 )
+
+#define USART3_RX_BUFFER_LENGTH (100)
+#define USART3_TX_BUFFER_LENGTH (100)
+
+static unsigned char  arrDiag_USART0_Rx_Buff[100] = {0};
+static unsigned short nUSART0_RX_Idx = 0;
+
+static unsigned char arrDiag_USART0_Tx_Buff[100] = {0};
+static unsigned short nUSART0_TX_Idx = 0;
+
+static unsigned char arrDiag_USART3_Rx_Buff[USART3_RX_BUFFER_LENGTH] = {0};
+static unsigned short nUSART3_RX_Idx = 0;
+
+static unsigned char arrDiag_USART3_Tx_Buff[USART3_TX_BUFFER_LENGTH] = {0};
+static unsigned short nUSART3_TX_Idx = 0;
+
+
+ISR(USART3_RX_vect)
+{
+
+  USART_RX_Buff[nUSART_RX_Idx] = UDR1;
+
+  if( nUSART3_RX_Idx < ( USART3_RX_BUFFER_LENGTH - 1 ) )
+  {
+    nUSART3_RX_Idx ++;
+  }
+
+}
+
+
+
+
+#endif /* ( BOARD_DIAGNOSTIC_AND_INITIALIZATION_ENABLE == 1 ) */

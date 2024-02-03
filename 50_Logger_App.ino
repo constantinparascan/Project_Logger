@@ -5,10 +5,12 @@
  *                       - adapt for Com_Service interraction
  */
 
+#include "01_Debug_Utils.h"
+
 #include "99_Automat_Board_cfg.h"
 #include "50_Logger_App.h"
 #include "50_Logger_App_cfg.h"
-#include "05_Eth_Service_Client.h"
+/*#include "05_Eth_Service_Client.h"*/
 #include "52_tool_Crypto.h"
 #include "54_tool_NV9plus_Utils.h"
 
@@ -140,43 +142,43 @@ void Logger_App_Debug_Print_State(void)
     switch(LoggerAppState)
     {
       case E_LOGGER_APP_UNININT:
-        Serial.println("-- E_LOGGER_APP_UNININT -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_UNININT -- ");
         break;
 
       case E_LOGGER_APP_INIT:
-        Serial.println("-- E_LOGGER_APP_INIT -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_INIT -- ");
         break;
 
       case E_LOGGER_APP_STARTUP_DELAY:
-        Serial.println("-- E_LOGGER_APP_STARTUP_DELAY -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_STARTUP_DELAY -- ");
         break;
 
       case E_LOGGER_APP_PROCESS_MESSAGES:
-        Serial.println("-- E_LOGGER_APP_PROCESS_MESSAGES -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_PROCESS_MESSAGES -- ");
         break;
 
       case E_LOGGER_APP_ETH_INFORM_SERVER:
-        Serial.println("-- E_LOGGER_APP_ETH_INFORM_SERVER -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_ETH_INFORM_SERVER -- ");
         break;
 
       case E_LOGGER_APP_ETH_INFORM_SERVER_ERROR_STATE:
-        Serial.println("-- E_LOGGER_APP_ETH_INFORM_SERVER_ERROR_STATE -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_ETH_INFORM_SERVER_ERROR_STATE -- ");
         break;
 
       case E_LOGGER_APP_ETH_PROCESS_SERVER_RESPONSE:
-        Serial.println("-- E_LOGGER_APP_ETH_PROCESS_SERVER_RESPONSE -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_ETH_PROCESS_SERVER_RESPONSE -- ");
         break;
 
       case E_LOGGER_APP_ETH_SEND_COMMAND_RESET_BILL_ACK_RESPONSE:
-        Serial.println("-- E_LOGGER_APP_ETH_SEND_COMMAND_RESET_BILL_ACK_RESPONSE -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_ETH_SEND_COMMAND_RESET_BILL_ACK_RESPONSE -- ");
         break;
 
       case E_LOGGER_APP_ETH_SEND_STARTUP_COMMAND:
-        Serial.println("-- E_LOGGER_APP_ETH_SEND_STARTUP_COMMAND -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_ETH_SEND_STARTUP_COMMAND -- ");
         break;
 
       case E_LOGGER_APP_ETH_SAVE_DATA_TO_EEPROM:
-        Serial.println("-- E_LOGGER_APP_ETH_SAVE_DATA_TO_EEPROM -- ");
+        Serial.println("[I] Logg_App -- E_LOGGER_APP_ETH_SAVE_DATA_TO_EEPROM -- ");
         break;
 
     }
@@ -422,9 +424,9 @@ void Logger_App_init(void)
    */
   unsigned char nStatus = 0;
 
-  #if(LOGGER_APP_DEBUG_SERIAL >= 1) 
-    Serial.begin(9600);
-  #endif
+//  #if(LOGGER_APP_DEBUG_SERIAL >= 1) 
+//    Serial.begin(9600);
+//  #endif
 
   /* first step initialization !!!
    * ----->>>> [ToDo] <<<<<----- optimize code make sure "sNV9plus.nCH1_bill" is initialized only once and in the right place
@@ -531,7 +533,7 @@ void Logger_App_init(void)
   }
 
   #if(LOGGER_APP_DEBUG_SERIAL == 1)
-    snprintf(Logger_DebugPrintBuff, 50, "Logger INIT CH1= %d, CH2= %d, CH3= %d, CH4= %d ", sNV9plus.nCH1_bill, sNV9plus.nCH2_bill, sNV9plus.nCH3_bill, sNV9plus.nCH4_bill);
+    snprintf(Logger_DebugPrintBuff, 50, "[I] Logg_App Logger INIT CH1= %d, CH2= %d, CH3= %d, CH4= %d ", sNV9plus.nCH1_bill, sNV9plus.nCH2_bill, sNV9plus.nCH3_bill, sNV9plus.nCH4_bill);
     Serial.println(Logger_DebugPrintBuff);
 
 
@@ -585,19 +587,21 @@ void Logger_App_Build_Server_Req_Bill_Payment_Generic(unsigned char nFrameType, 
    *   http://145.239.84.165:35269/gsm/entry_new.php?x=862462030142276;1111111111111111111;0726734731;RDS;0;0;0;0;P;0;0;No_approver;IASI;PALAS_IASI;PALAS_PARTER;NV9;1
    */
 
-
+/*
   Eth_Service_Client_ClearTxBuff();
+*/
 
   //Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");
   //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");
-  Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");    /* PRODUCTION address ... !!!  */
+/*  Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");    /* PRODUCTION address ... !!!  */ 
   //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");      /* LOCAL Tests ! address  !!!  */
 
+/*
   Eth_Service_Client_AddTxData( LOG_APP_IMEI_CARD ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_SN ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_PHONE_NR ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_OPERATOR ";");
-
+*/
 
   /* 
    * Add Bills channel 1
@@ -606,10 +610,10 @@ void Logger_App_Build_Server_Req_Bill_Payment_Generic(unsigned char nFrameType, 
    * Add Bills channel 4
    * Add type of event
    */ 
-
+/*
   snprintf(arrDummy, 50,"%d;%d;%d;%d;", nCH1_old, nCH2_old, nCH3_old, nCH4_old);
   Eth_Service_Client_AddTxData(arrDummy);   
-
+*/
   /*   - 1 byte
                                                    1 = bill of type 1 validated
                                                    2 = bill of type 2 validated
@@ -668,17 +672,17 @@ void Logger_App_Build_Server_Req_Bill_Payment_Generic(unsigned char nFrameType, 
     break;       
   }
 
-  Eth_Service_Client_AddTxData(arrDummy);
+/* Eth_Service_Client_AddTxData(arrDummy); */
 
 
   
 
   #if(LOGGER_APP_DEBUG_SERIAL == 1)
-    Serial.println("----------------------------");
+    Serial.println("[I] Logg_App ----------------------------");
     Serial.println(arrDummy);
-    Serial.println("----------------------------");  
+    Serial.println("[I] Logg_App ----------------------------");  
   #endif
-
+/*
 
   Eth_Service_Client_AddTxData( LOG_APP_VERSION_MAJOR ";");
   Eth_Service_Client_AddTxData( LOG_APP_TOWN ";");
@@ -688,12 +692,12 @@ void Logger_App_Build_Server_Req_Bill_Payment_Generic(unsigned char nFrameType, 
   Eth_Service_Client_AddTxData( LOG_APP_DEFAULT_RSSI);
 
   Eth_Service_Client_AddTxData( " HTTP/1.1");
-
+*/
   /* [ToDo] ... check the return status !!!  */  
 
   //Eth_Service_Client_StackBuffRequest();
 
-  Eth_Service_Client_SendRequest(); 
+ /* Eth_Service_Client_SendRequest(); */
 }
 
 
@@ -714,18 +718,20 @@ void Logger_App_Build_Server_Req_Bill_Payment(void)
    * http://192.168.0.109/entry.php?x=862462030142276;1111111111111111111;0726734732;RDS;0;0;0;0;P;0;0;No_approver;IASI;PALAS_IASI;PALAS_PARTER;NV9;1
    */
 
-
+/*
   Eth_Service_Client_ClearTxBuff();
-
+*/
   //Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");
   //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");
-  Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");    /* PRODUCTION address ... !!!  */
+/*  Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");    /* PRODUCTION address ... !!!  */
   //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");      /* LOCAL Tests ! address  !!!  */
 
+/*
   Eth_Service_Client_AddTxData( LOG_APP_IMEI_CARD ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_SN ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_PHONE_NR ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_OPERATOR ";");
+*/
 
   /* 
    * Add Bills channel 1
@@ -754,15 +760,17 @@ void Logger_App_Build_Server_Req_Bill_Payment(void)
   /* add type of errors --> 0         */
   /* add reset confirmation --> 0     */
 
+/*
   snprintf(arrDummy, 50,"%d;%d;%d;%d;%d;0;0;", nCH1_old, nCH2_old, nCH3_old, nCH4_old, nLastBillType);
   Eth_Service_Client_AddTxData(arrDummy);
-
+*/
   #if(LOGGER_APP_DEBUG_SERIAL == 1)
-    Serial.println("----------------------------");
+    Serial.println("[I] Logg_App ----------------------------");
     Serial.println(arrDummy);
-    Serial.println("----------------------------");  
+    Serial.println("[I] Logg_App ----------------------------");  
   #endif
 
+/*
 
   Eth_Service_Client_AddTxData( LOG_APP_VERSION_MAJOR ";");
   Eth_Service_Client_AddTxData( LOG_APP_TOWN ";");
@@ -772,12 +780,13 @@ void Logger_App_Build_Server_Req_Bill_Payment(void)
   Eth_Service_Client_AddTxData( LOG_APP_DEFAULT_RSSI);
 
   Eth_Service_Client_AddTxData( " HTTP/1.1");
-
+*/
   /* [ToDo] ... check the return status !!!  */  
 
   //Eth_Service_Client_StackBuffRequest();
 
-  Eth_Service_Client_SendRequest(); 
+/*  Eth_Service_Client_SendRequest(); */
+
 }
 
 
@@ -797,16 +806,18 @@ void Logger_App_Build_Server_Reset_Bill_Value_Response(void)
    * http://192.168.0.109/entry.php?x=862462030142276;1111111111111111111;0726734732;RDS;0;0;0;0;A;0;1;2;IASI;PALAS_IASI;PALAS_PARTER;NV9;1
    */
 
-
+/*
   Eth_Service_Client_ClearTxBuff();
 
   Eth_Service_Client_AddTxData("GET /gsm/entry_new.php?x=");    /* PRODUCTION address ... !!!  */
+
   //Eth_Service_Client_AddTxData("GET /entry_new.php?x=");      /* LOCAL Tests ! address  !!!  */
+/*  
   Eth_Service_Client_AddTxData( LOG_APP_IMEI_CARD ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_SN ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_PHONE_NR ";");
   Eth_Service_Client_AddTxData( LOG_APP_SIM_OPERATOR ";");
-
+*/
   /* 
    * Add Bills channel 1
    * Add Bills channel 2
@@ -835,6 +846,7 @@ void Logger_App_Build_Server_Reset_Bill_Value_Response(void)
   /* add reset confirmation --> 0     */
 
   //snprintf(arrDummy, 50,"%d;%d;%d;%d;%d;0;0;");
+/*  
   Eth_Service_Client_AddTxData("0;0;0;0;A;0;1;");
 
 
@@ -846,12 +858,12 @@ void Logger_App_Build_Server_Reset_Bill_Value_Response(void)
   Eth_Service_Client_AddTxData( LOG_APP_DEFAULT_RSSI);
 
   Eth_Service_Client_AddTxData( " HTTP/1.1");
-
+*/
   /* [ToDo] ... check the return status !!!  */  
 
   //Eth_Service_Client_StackBuffRequest();
 
-  Eth_Service_Client_SendRequest(); 
+/*  Eth_Service_Client_SendRequest(); */
 }
 
 
@@ -1103,7 +1115,7 @@ void Logger_App_main_v2(void)
             {
 
               #if(LOGGER_APP_DEBUG_SERIAL == 1)
-                snprintf(Logger_DebugPrintBuff, 50, "Log CH1=%d, CH1_O=%d, CH2=%d, CH2_O=%d, CH3=%d, CH3_O=%d, CH4=%d, CH4_O=%d, ERR=%d, ERR_O=%d", sNV9plus.nCH1_bill, nCH1_old, sNV9plus.nCH2_bill, nCH2_old, sNV9plus.nCH3_bill, nCH3_old, sNV9plus.nCH4_bill, nCH4_old, sNV9plus.nBillValidator_err, eMachineError_old);
+                snprintf(Logger_DebugPrintBuff, 50, "[I] Logg_App Log CH1=%d, CH1_O=%d, CH2=%d, CH2_O=%d, CH3=%d, CH3_O=%d, CH4=%d, CH4_O=%d, ERR=%d, ERR_O=%d", sNV9plus.nCH1_bill, nCH1_old, sNV9plus.nCH2_bill, nCH2_old, sNV9plus.nCH3_bill, nCH3_old, sNV9plus.nCH4_bill, nCH4_old, sNV9plus.nBillValidator_err, eMachineError_old);
                 Serial.println(Logger_DebugPrintBuff);
               #endif
 
@@ -1177,7 +1189,7 @@ void Logger_App_main_v2(void)
                 {
 
                   #if(LOGGER_APP_DEBUG_SERIAL == 1)
-                    Serial.println("---------- ERROR ------------");
+                    Serial.println("[I] Logg_App ---------- ERROR ------------");
                   #endif
 
                   AT_Command_Callback_Request_ERROR_Status_Transmission();
@@ -1188,7 +1200,7 @@ void Logger_App_main_v2(void)
                 {
 
                   #if(LOGGER_APP_DEBUG_SERIAL == 1)
-                    Serial.println("---------- DATA BILLS ------------");
+                    Serial.println("[I] Logg_App ---------- DATA BILLS ------------");
                   #endif
 
                   AT_Command_Callback_Request_Bill_Status_Transmission();

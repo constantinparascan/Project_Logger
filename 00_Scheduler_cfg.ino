@@ -14,11 +14,13 @@
 #include "00_Scheduler.h"
 #include "00_Scheduler_cfg.h"
 
+#include "01_Debug_Utils.h"
+
 #include "99_Automat_Board_cfg.h"
 #include "99_Automat_Board_Config.h"
 
 /* include headers of drivers/applications */
-#include "05_Eth_Service_Client.h"
+/* #include "05_Eth_Service_Client.h" */
 #include "50_Logger_App.h"
 #include "50_Logger_App_Parallel.h"
 #include "07_USART_Client.h"
@@ -64,6 +66,14 @@ unsigned char nHW_Config_TYPE_Local = 0;
  */
 void init_cyclic_Task_1ms(void)
 {
+
+  /*
+   * Start Debugging helper functions ...
+   */
+  #if( BOARD_DIAGNOSTIC_SERIAL_DEBUGGING_ENABLE > 0 )  
+    Debug_print_init();
+  #endif /* BOARD_DIAGNOSTIC_SERIAL_DEBUGGING_ENABLE > 0 */
+
 
   /* 
    * Detect current HW configuration 
@@ -297,7 +307,7 @@ void main_cyclic_Task_1s(void)
 
 
 
-#if (BOARD_DIGNOSTIC_AND_INITIALIZATION_ENABLE == 0)
+#if (BOARD_DIAGNOSTIC_AND_INITIALIZATION_ENABLE == 0)
 /*****************************************************
  *
  *          OS Scheduler TCB configuration 
@@ -337,11 +347,19 @@ T_TaskControlBlock TCB_OS[MAX_TASK_LIST_LEN] =
 
 #define DEBUG_EEPROM_DEFAULT_RESTORE_VALUE (0)
 
+
 void init_cyclic_DIAG_Task_1ms(void)
 {
 
-  Serial.begin(9600); 
-  Serial.println("[I] !!! DEBUG & SERVICE MODE ACTIVE !!!  ");
+  /*
+   * Start Debugging helper functions ...
+   */
+  #if( BOARD_DIAGNOSTIC_SERIAL_DEBUGGING_ENABLE > 0 )  
+    Debug_print_init();
+    Serial.println("[I] !!! DEBUG & SERVICE MODE ACTIVE !!!  ");
+  #endif /* BOARD_DIAGNOSTIC_SERIAL_DEBUGGING_ENABLE > 0 */
+
+
 
   EEPROM_driver_init();  
 
@@ -362,7 +380,7 @@ void init_cyclic_DIAG_Task_1ms(void)
   //Serial.println("NVM READ ALL ... during startup ... ");
   NvM_ReadAll();
 
-
+#if( BOARD_DIAGNOSTIC_NVM_BLOCKS_RESET_IGNORE == 0 )
   nNvM_RAM_Mirror_CH1 = DEBUG_EEPROM_DEFAULT_RESTORE_VALUE;
   NvM_Write_Block(NVM_BLOCK_CHAN_1_ID);
   Serial.print("[I] Set NvM Block 1 - CH1 value to: ");
@@ -397,92 +415,101 @@ void init_cyclic_DIAG_Task_1ms(void)
 
 
  /* ------------------------------------------------------------------- */
+  #if( BOARD_DIAGNOSTIC_NVM_BLOCKS_RESET_ONLY_CASH == 0 )
+    strcpy(arrNvM_RAM_Mirror_Str_SimNR, LOG_APP_SIM_PHONE_NR);
+    NvM_Write_Block(NVM_BLOCK_CHAN_6_ID);
+    Serial.print("[I] Set NvM Block 6 value to: " LOG_APP_SIM_PHONE_NR);
+    Serial.println();
 
-  strcpy(arrNvM_RAM_Mirror_Str_SimNR, LOG_APP_SIM_PHONE_NR);
-  NvM_Write_Block(NVM_BLOCK_CHAN_6_ID);
-  Serial.print("[I] Set NvM Block 6 value to: " LOG_APP_SIM_PHONE_NR);
-  Serial.println();
+    strcpy(arrNvM_RAM_Mirror_Str_Town, LOG_APP_TOWN);
+    NvM_Write_Block(NVM_BLOCK_CHAN_7_ID);
+    Serial.print("[I] Set NvM Block 7 value to: " LOG_APP_TOWN);
+    Serial.println();
 
-  strcpy(arrNvM_RAM_Mirror_Str_Town, LOG_APP_TOWN);
-  NvM_Write_Block(NVM_BLOCK_CHAN_7_ID);
-  Serial.print("[I] Set NvM Block 7 value to: " LOG_APP_TOWN);
-  Serial.println();
+    
+    strcpy(arrNvM_RAM_Mirror_Str_Place, LOG_APP_PLACE);
+    NvM_Write_Block(NVM_BLOCK_CHAN_8_ID);
+    Serial.print("[I] Set NvM Block 8 value to: " LOG_APP_PLACE);
+    Serial.println();
 
+    strcpy(arrNvM_RAM_Mirror_Str_Details, LOG_APP_DETAILS);
+    NvM_Write_Block(NVM_BLOCK_CHAN_9_ID);
+    Serial.print("[I] Set NvM Block 9 value to: " LOG_APP_DETAILS);
+    Serial.println();
+
+
+    strcpy(arrNvM_RAM_Mirror_Str_Device, LOG_APP_DEVICE_TYPE);
+    NvM_Write_Block(NVM_BLOCK_CHAN_10_ID);
+    Serial.print("[I] Set NvM Block 10 value to: " LOG_APP_DEVICE_TYPE);
+    Serial.println();
+  #endif /* BOARD_DIAGNOSTIC_NVM_BLOCKS_RESET_ONLY_CASH == 0 */
   
-  strcpy(arrNvM_RAM_Mirror_Str_Place, LOG_APP_PLACE);
-  NvM_Write_Block(NVM_BLOCK_CHAN_8_ID);
-  Serial.print("[I] Set NvM Block 8 value to: " LOG_APP_PLACE);
-  Serial.println();
-
-  strcpy(arrNvM_RAM_Mirror_Str_Details, LOG_APP_DETAILS);
-  NvM_Write_Block(NVM_BLOCK_CHAN_9_ID);
-  Serial.print("[I] Set NvM Block 9 value to: " LOG_APP_DETAILS);
-  Serial.println();
-
-
-  strcpy(arrNvM_RAM_Mirror_Str_Device, LOG_APP_DEVICE_TYPE);
-  NvM_Write_Block(NVM_BLOCK_CHAN_10_ID);
-  Serial.print("[I] Set NvM Block 10 value to: " LOG_APP_DEVICE_TYPE);
-  Serial.println();
-
-
+#endif /* ( BOARD_DIAGNOSTIC_NVM_BLOCKS_RESET_IGNORE == 0 ) */
 
   /*
-   * ... special NvM blocks ... write default values
+   * ... special NvM blocks ... write default values if don't exist already !!
    *     it's mandatory not to have empty/not written blocks here
    */
 
   /* no NvM entry for the phone number ... */
-/*  
   if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_6_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_SimNR, LOG_APP_SIM_PHONE_NR);
     NvM_Write_Block(NVM_BLOCK_CHAN_6_ID);
+
+    Serial.print("[I] AUTOMATIC - MISSING ENTRY - Set NvM Block 6 value to: " LOG_APP_SIM_PHONE_NR);
+    Serial.println();
   }
-*/
+
 
   /* no NvM entry for the Town        ... */
-/*  
   if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_7_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_Town, LOG_APP_TOWN);
     NvM_Write_Block(NVM_BLOCK_CHAN_7_ID);
+
+    Serial.print("[I] AUTOMATIC - MISSING ENTRY - Set NvM Block 7 value to: " LOG_APP_TOWN);
+    Serial.println();
   }
-*/
 
   /* no NvM entry for the Place       ... */
-/*
   if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_8_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_Place, LOG_APP_PLACE);
     NvM_Write_Block(NVM_BLOCK_CHAN_8_ID);
+
+    Serial.print("[I] AUTOMATIC - MISSING ENTRY - Set NvM Block 8 value to: " LOG_APP_PLACE);
+    Serial.println();
   }
-*/
+
   /* no NvM entry for the Details       ... */
-/*  
   if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_9_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_Details, LOG_APP_DETAILS);
     NvM_Write_Block(NVM_BLOCK_CHAN_9_ID);
+
+    Serial.print("[I] AUTOMATIC - MISSING ENTRY - Set NvM Block 9 value to: " LOG_APP_DETAILS);
+    Serial.println();
   }
-*/
 
   /* no NvM entry for the Device Type   ... */
-/*  
   if( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_10_ID) & 0x80 ) == 0x00 )
   {
     strcpy(arrNvM_RAM_Mirror_Str_Device, LOG_APP_DEVICE_TYPE);
     NvM_Write_Block(NVM_BLOCK_CHAN_10_ID);
-  }
-*/
-  Logger_App_pre_init_Validate_NvM_String_Data();
 
+    Serial.print("[I] AUTOMATIC - MISSING ENTRY - Set NvM Block 10 value to: " LOG_APP_DEVICE_TYPE);
+    Serial.println();    
+  }
+
+  Logger_App_pre_init_Validate_NvM_String_Data();
 }
 
 void init_cyclic_DIAG_Task_5ms(void)
 {
 
 }
+
 
 void init_cyclic_DIAG_Task_10ms(void)
 {
@@ -508,16 +535,18 @@ void main_cyclic_DIAG_Task_5ms(void)
 
 }
 
+
 void main_cyclic_DIAG_Task_10ms(void)
 {
   static unsigned char nDebugService_NvM_Complete = 0;
+ 
 
   /* to be used in 5ms task because 1 EEPROM byte writting takes 3.8 ms at most ... ?!?  -- [ToDo] - check if 10ms is also OK ...  */
   NvM_Main();
 
 
   /*
-   * Memory blocks updated ... display "Complete" message ...
+   * Memory blocks updated ... no write opperation in progress ... display "Complete" message ...
    */
   if( ( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_1_ID) & 0x01 ) == 0x00 ) && \
       ( ( NvM_Get_Block_Status(NVM_BLOCK_CHAN_2_ID) & 0x01 ) == 0x00 ) && \
@@ -532,9 +561,11 @@ void main_cyclic_DIAG_Task_10ms(void)
       ( nDebugService_NvM_Complete == 0 ) \      
       )
     {
-      Serial.println("[I] Memory update of NvM blocks 1, 2, 3, 4, 5 -- COMPLETE ! ");
+      Serial.println("[I] Memory update of NvM blocks -- COMPLETE -- ! ");
+
       nDebugService_NvM_Complete ++;
     }
+  
 }
 
 void main_cyclic_DIAG_Task_1s(void)
@@ -575,7 +606,7 @@ T_TaskControlBlock TCB_OS[MAX_TASK_LIST_LEN] =
 	  {main_cyclic_DIAG_Task_1s, init_cyclic_DIAG_Task_1s, 1000, 999} 
 };
 
-#endif /* else (BOARD_DIGNOSTIC_AND_INITIALIZATION_ENABLE == 0) */
+#endif /* else (BOARD_DIAGNOSTIC_AND_INITIALIZATION_ENABLE == 0) */
 
 
 
